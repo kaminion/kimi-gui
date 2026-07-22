@@ -2,7 +2,8 @@
    Kimi Desktop — settings.css (R4)
    Settings modal (#settings-root): backdrop + 560px card with left section
    rail / right content, segmented controls, account/update rows.
-   Chat-options chrome: #model-select pill + .model-dropdown, #swarm-toggle.
+   Chat-options chrome: #model-select pill + .model-dropdown, #swarm-toggle,
+   #effort-select + #composer-options row (v3 block at the end of this file).
    Tokens only (--bg, --text, --accent, --border, --radius-*, --space-*);
    dark-first handled by base.css — no hardcoded colors here.
    ========================================================================== */
@@ -338,4 +339,69 @@
 
 #swarm-toggle.on::before {
   background: var(--accent);
+}
+
+/* ==========================================================================
+   composer options v3
+   #composer-options row inside #composer-wrap (below the textarea): model /
+   swarm / effort pills, left-aligned, compact 11px ghosts. The wrap gains
+   flex-wrap so the row drops under the input row; a hairline separates them.
+   ========================================================================== */
+
+#composer-wrap {
+  flex-wrap: wrap;
+}
+
+#composer-options {
+  flex: 1 1 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding-top: var(--space-2);
+  border-top: 0.5px solid var(--border);
+}
+
+/* Compact ghost pills — one rule covers all three options in their new home
+   (beats the id-level v2 ghost sizing in components.css by specificity). */
+#composer-options .pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: default;
+  user-select: none;
+}
+
+#composer-options .pill:hover {
+  background: var(--hover-bg);
+  color: var(--text);
+}
+
+#composer-options .pill:active {
+  background: var(--active-bg);
+}
+
+/* Effort pill gets the same trailing chevron as the model pill. */
+#effort-select::after {
+  content: '';
+  flex: none;
+  width: 5px;
+  height: 5px;
+  margin-left: 2px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg) translateY(-1px);
 }

@@ -1,6 +1,17 @@
-/* onboarding.js — splash + first-run onboarding flow (R1).
+/* onboarding.js — splash + first-run onboarding flow (R4, v3).
  * Exposes window.Onboarding.init(launchApp); the shell (R6) calls it at boot
  * with the v1 boot sequence as `launchApp`.
+ *
+ * v3 gate (CONTRACT-V3): the app runs CLI-free (direct engine), so the ONLY
+ * first-run gate is login — flow = splash → login card (when needsOnboarding)
+ * → app. needsOnboarding is purely "not logged in" and engine-independent.
+ * The v2 CLI-install step is gone from the gate: the preload still exports
+ * window.kimi.onboardingInstallCli, but the settings engine section owns it
+ * now — it is never offered or called from here.
+ *
+ * Defensive for both gate shapes: v3 main returns { needsOnboarding } while a
+ * v2 main could still attach { cliInstalled, loggedIn } — a state that says
+ * loggedIn === true never gates, whatever else it carries.
  *
  * Drives the shell-owned contract DOM (CONTRACT-V2, ids fixed):
  *   #splash > #splash-logo + #splash-word
@@ -11,9 +22,9 @@
  *   #onboarding-secondary-btn
  *
  * Preload APIs used (window.kimi, M1): onboardingGetState,
- * onboardingInstallCli, onboardingStartLogin, onboardingCancelLogin,
- * bootstrapRetry, openExternal, onEvent. Push events:
- *   { type:'onboarding', phase:'install'|'login', percent?, message?, status? }
+ * onboardingStartLogin, onboardingCancelLogin, bootstrapRetry, openExternal,
+ * onEvent. Push events:
+ *   { type:'onboarding', phase:'login', status:'done'|'error', message? }
  * Every API is called defensively: when the preload surface is incomplete the
  * flow degrades to "skip onboarding" (v1 behavior) instead of trapping the
  * user on the card.
@@ -29,7 +40,6 @@
   const SPLASH_HOLD_MS = 300;
   const SPLASH_OUT_MS = 350;
   const CHECK_MS = 600; // login-success checkmark draw
-  const MANUAL_INSTALL_URL = 'https://code.kimi.com';
 
   const $ = (id) => document.getElementById(id);
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -38,7 +48,7 @@
   let launchAppFn = null;
   let unsubEvents = null;     // window.kimi.onEvent unsubscribe
   let pendingAction = null;   // resolve fn for the action the flow awaits
-  let loginActive = false;    // a `kimi login` child is believed to be running
+  let loginActive = false;    // a device-flow login is believed to be in flight
   let flashTimer = null;      // login-status "copied" flash timer
   let buttonsWired = false;
   let lastStepUI = null;      // thunk re-rendering the current step (language change)
@@ -151,27 +161,9 @@
 
   function handleKimiEvent(msg) {
     if (!msg || msg.type !== 'onboarding') return;
-    if (msg.phase === 'login') {
-      if (msg.status === 'done') wake({ type: 'login-done' });
-      else if (msg.status === 'error') wake({ type: 'login-error', message: msg.message });
-    } else if (msg.phase === 'install') {
-      updateInstallProgress(msg);
-    }
-  }
-
-  function updateInstallProgress(msg) {
-    const wrap = $('onboarding-progress');
-    if (!wrap || wrap.hidden) return;
-    const label = $('onboarding-progress-label');
-    const pct = Number(msg.percent);
-    if (Number.isFinite(pct)) {
-      wrap.classList.remove('indeterminate');
-      const fill = wrap.querySelector('.progress-bar > div');
-      if (fill) fill.style.width = `${Math.max(0, Math.min(100, pct))}%`;
-      if (label) label.textContent = msg.message || `${Math.round(pct)}%`;
-    } else if (label && msg.message) {
-      label.textContent = msg.message;
-    }
+    if (msg.phase !== 'login') return; // v3: login is the only gated phase
+    if (msg.status === 'done') wake({ type: 'login-done' });
+    else if (msg.status === 'error') wake({ type: 'login-error', message: msg.message });
   }
 
   // One place to re-render the card: title/desc, the two action buttons, and
@@ -202,80 +194,14 @@
     if (login) login.hidden = !showLogin;
   }
 
-  /* ---- step 1: CLI install --------------------------------------------------- */
-
-  function showCliIntro(error) {
-    lastStepUI = () => showCliIntro(error);
-    setStepUI({
-      title: error
-        ? T('onboarding.cli_error_title', '설치에 실패했습니다')
-        : T('onboarding.cli_title', 'Kimi Code CLI가 필요합니다'),
-      desc: error || T('onboarding.cli_desc', 'Kimi Code CLI를 자동으로 설치합니다.'),
-      descError: !!error,
-      primary: error
-        ? T('onboarding.retry', '다시 시도')
-        : T('onboarding.cli_install', '설치 시작'),
-      secondary: error ? T('onboarding.manual_install', '수동 설치 안내') : null,
-    });
-  }
-
-  // Resolves with a fresh state once the CLI is installed; loops on failure.
-  async function runCliStep() {
-    let error = null;
-    for (;;) {
-      showCliIntro(error);
-      for (;;) {
-        const action = await nextAction();
-        if (action.type === 'secondary') { openExternal(MANUAL_INSTALL_URL); continue; }
-        break; // primary: install / retry
-      }
-
-      setStepUI({
-        title: T('onboarding.cli_title', 'Kimi Code CLI가 필요합니다'),
-        desc: T('onboarding.cli_desc', 'Kimi Code CLI를 자동으로 설치합니다.'),
-        primary: T('onboarding.cli_installing', '설치 중…'),
-        primaryDisabled: true,
-        showProgress: true,
-      });
-      lastStepUI = null; // transient install state: not safe to re-render
-      const wrap = $('onboarding-progress');
-      wrap?.classList.add('indeterminate');
-      const fill = wrap?.querySelector('.progress-bar > div');
-      if (fill) fill.style.width = '';
-      const label = $('onboarding-progress-label');
-      if (label) label.textContent = T('onboarding.cli_installing', '설치 중…');
-
-      let ok = false;
-      let message = null;
-      try {
-        const res = await window.kimi.onboardingInstallCli();
-        ok = !!(res && res.ok);
-        if (!ok) message = res?.message || null;
-      } catch (err) {
-        message = err?.message || String(err);
-      }
-
-      if (ok) {
-        wrap?.classList.remove('indeterminate');
-        if (fill) fill.style.width = '100%';
-        if (label) label.textContent = T('onboarding.cli_installed', '설치가 완료되었습니다');
-        const state = await getOnboardingState(); // re-check after install
-        if (state && state.cliInstalled) return state;
-        error = T('onboarding.cli_verify_failed', '설치를 확인할 수 없습니다. 다시 시도해 주세요.');
-      } else {
-        error = message || T('onboarding.cli_error', '자동 설치에 실패했습니다. 수동 설치 안내를 확인해 주세요.');
-      }
-    }
-  }
-
-  /* ---- step 2: Kimi login ----------------------------------------------------- */
+  /* ---- the one and only step: Kimi login (v3 gate) ---------------------------- */
 
   function showLoginIntro() {
     lastStepUI = () => showLoginIntro();
     loginActive = false;
     setStepUI({
-      title: T('onboarding.login_title', 'Kimi 로그인'),
-      desc: T('onboarding.login_desc', '브라우저에서 인증 코드를 입력해 로그인합니다.'),
+      title: T('onboarding.login_title_v3', 'Kimi에 로그인'),
+      desc: T('onboarding.login_desc_v3', '브라우저에서 인증 코드를 입력하면 바로 시작할 수 있습니다.'),
       primary: T('onboarding.login_start', '로그인 시작'),
     });
   }
@@ -291,8 +217,8 @@
   function showLoginWaiting(userCode, verificationUrl) {
     lastStepUI = () => showLoginWaiting(userCode, verificationUrl);
     setStepUI({
-      title: T('onboarding.login_title', 'Kimi 로그인'),
-      desc: T('onboarding.login_desc', '브라우저에서 인증 코드를 입력해 로그인합니다.'),
+      title: T('onboarding.login_title_v3', 'Kimi에 로그인'),
+      desc: T('onboarding.login_desc_v3', '브라우저에서 인증 코드를 입력하면 바로 시작할 수 있습니다.'),
       secondary: T('onboarding.cancel', '취소'),
       showLogin: true,
     });
@@ -316,8 +242,8 @@
     lastStepUI = () => showLoginError(message);
     loginActive = false;
     setStepUI({
-      title: T('onboarding.login_title', 'Kimi 로그인'),
-      desc: T('onboarding.login_desc', '브라우저에서 인증 코드를 입력해 로그인합니다.'),
+      title: T('onboarding.login_title_v3', 'Kimi에 로그인'),
+      desc: T('onboarding.login_desc_v3', '브라우저에서 인증 코드를 입력하면 바로 시작할 수 있습니다.'),
       primary: T('onboarding.retry', '다시 시도'),
       secondary: T('onboarding.cancel', '취소'),
       showLogin: true,
@@ -367,7 +293,7 @@
         return;
       }
       if (action.type === 'login-error') {
-        if (!loginActive) continue; // late error from a cancelled child
+        if (!loginActive) continue; // late error from a cancelled login
         showLoginError(action.message);
         continue;
       }
@@ -442,11 +368,14 @@
     launchAppFn = typeof launchApp === 'function' ? launchApp : null;
     const statePromise = getOnboardingState(); // fetch in parallel with the splash
     await playSplash();
-    let state = await statePromise;
-    if (!state || !state.needsOnboarding) { await finish(); return; }
+    const state = await statePromise;
+    // v3 gate: login only. Defensive for both gate shapes — v3 main returns
+    // { needsOnboarding } (= "not logged in"); a v2 main could still attach
+    // { cliInstalled, loggedIn }, but a logged-in user is never gated now
+    // (the CLI is optional), so the login card is the only step left.
+    if (!state || !state.needsOnboarding || state.loggedIn === true) { await finish(); return; }
     if (!showOnboarding()) { await finish(); return; } // contract DOM missing
-    if (!state.cliInstalled) state = await runCliStep();
-    if (state && !state.loggedIn) await runLoginStep();
+    await runLoginStep();
     await finish();
   }
 

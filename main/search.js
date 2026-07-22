@@ -243,7 +243,29 @@ async function listSessionDirs(home) {
       sessions.push({ sessionId: d.name, dir: path.join(root, ws.name, d.name), workspaceDir: ws.name });
     }
   }
-  // Activity order: state.json mtime is a good proxy and one stat per session is cheap.
+  return sortByMtime(sessions);
+}
+
+// V3 (B3): direct-engine sessions live FLAT under <root>/<sid>/ (no wd_*
+// workspace level, and ids are not necessarily session_-prefixed), with the
+// same state.json + agents/main/wire.jsonl contents (CONTRACT-V3).
+async function listFlatSessionDirs(root) {
+  let dirs;
+  try {
+    dirs = await fs.readdir(root, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const sessions = [];
+  for (const d of dirs) {
+    if (!d.isDirectory()) continue;
+    sessions.push({ sessionId: d.name, dir: path.join(root, d.name), workspaceDir: null });
+  }
+  return sortByMtime(sessions);
+}
+
+// Activity order: state.json mtime is a good proxy and one stat per session is cheap.
+async function sortByMtime(sessions) {
   const withMtime = await Promise.all(
     sessions.map(async (s) => {
       const st = await statOrNull(path.join(s.dir, 'state.json'));
@@ -282,22 +304,35 @@ function makeSnippet(text, lowerText, lowerQuery) {
  * Search all local session transcripts for a case-insensitive substring.
  * @param {string} query
  * @param {number} [limit=50]
+ * @param {{extraRoots?: string[]}} [opts] V3 (B3): additional FLAT session
+ *   roots (<root>/<sid>/, e.g. the direct engine's direct-sessions dir) to
+ *   search alongside the CLI's ~/.kimi-code/sessions tree. Omitting opts
+ *   keeps the v2 behavior exactly.
  * @returns {Promise<Array<{sessionId:string, sessionTitle:string, cwd:string,
  *   messageId:string, role:string, snippet:string, createdAt:string}>>}
  *   Hits ranked newest-first.
  */
-async function searchAll(query, limit = 50) {
+async function searchAll(query, limit = 50, opts) {
   const q = typeof query === 'string' ? query.trim() : '';
   const cap = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 50;
   if (!q) return [];
   const lowerQuery = q.toLowerCase();
   const home = kimiHome();
+  const extraRoots =
+    opts && Array.isArray(opts.extraRoots)
+      ? opts.extraRoots.filter((r) => typeof r === 'string' && r.length > 0)
+      : [];
 
-  const [sessions, indexById] = await Promise.all([listSessionDirs(home), loadSessionIndex(home)]);
+  const [sessions, indexById, extraSessions] = await Promise.all([
+    listSessionDirs(home),
+    loadSessionIndex(home),
+    Promise.all(extraRoots.map((r) => listFlatSessionDirs(r))).then((r) => r.flat()),
+  ]);
+  const allSessions = sessions.concat(extraSessions);
 
   // Load transcripts for candidate sessions (cache makes this stat-only when warm).
   const perSession = await Promise.all(
-    sessions.map(async (s) => {
+    allSessions.map(async (s) => {
       const [meta, entries] = await Promise.all([
         loadSessionMeta(s.dir),
         loadWireEntries(path.join(s.dir, 'agents', 'main', 'wire.jsonl'), s.sessionId),
@@ -318,7 +353,10 @@ async function searchAll(query, limit = 50) {
     if (!lowerText.includes(lowerQuery)) continue;
     const ctx = perSession.find((p) => p.s.sessionId === e.sessionId);
     const meta = ctx && ctx.meta;
-    const cwd = (meta && meta.cwd) || indexById.get(e.sessionId) || (ctx ? cwdFromDirName(ctx.s.workspaceDir) : '');
+    const cwd =
+      (meta && meta.cwd) ||
+      indexById.get(e.sessionId) ||
+      (ctx && ctx.s.workspaceDir ? cwdFromDirName(ctx.s.workspaceDir) : '');
     const title =
       (meta && (meta.title || meta.lastPrompt)) ||
       firstUserLine(ctx ? ctx.entries : []) ||

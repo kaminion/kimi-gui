@@ -1,6 +1,6 @@
 # Kimi Desktop — Design System
 
-Apple-HIG, **dark-first black-premium** (v2) design system for the Kimi
+Apple-HIG, **dark-first charcoal-premium** (v3) design system for the Kimi
 Desktop chat UI. Implemented in three stylesheets, loaded in this order
 (no bundler, plain `<link>` tags):
 
@@ -11,14 +11,14 @@ Desktop chat UI. Implemented in three stylesheets, loaded in this order
 UI copy is Korean (owned by the JS agents); the CSS itself contains no
 user-visible strings.
 
-## Theme model (v2): dark-first, inverted token layering
+## Theme model (v3): dark-first, inverted token layering
 
 The product default is **dark on every OS** — the app renders dark unless
 the user explicitly picks 라이트 in Settings. v1's layering (`:root` light +
 `@media (prefers-color-scheme: dark)` overrides) could not express "dark
-even on a light OS", so v2 **inverts** it:
+even on a light OS", so v2 **inverts** it (kept in v3):
 
-- `:root` — **dark** black-premium palette (base). Also covers
+- `:root` — **dark** charcoal-premium palette (base). Also covers
   `[data-theme="dark"]` and a missing `data-theme` attribute.
 - `:root[data-theme="light"]` — the v1 Apple **light** palette, unchanged
   (explicit opt-in only).
@@ -36,68 +36,78 @@ token layering.
 
 ## Tokens (`base.css`)
 
-Contract-fixed custom properties; v2 dark values are the base `:root`
+Contract-fixed custom properties; v3 dark values are the base `:root`
 values, light lives under `:root[data-theme="light"]`:
 
-| Token | Dark (base) | Light (`[data-theme="light"]`) |
+| Token | Dark (base, v3) | Light (`[data-theme="light"]`, v1) |
 | --- | --- | --- |
-| `--bg` | `#000000` | `#ffffff` |
-| `--bg-secondary` | `#0a0a0d` | `#f5f5f7` |
-| `--sidebar-bg` | `rgba(14,14,18,.72)` | `rgba(246,246,248,.8)` |
-| `--header-bg` | `rgba(10,10,13,.72)` | `rgba(255,255,255,.8)` |
-| `--text` | `#f5f5f7` | `#1d1d1f` |
-| `--text-secondary` | `#98989f` | `#6e6e73` |
-| `--text-dim` | `#6e6e73` | `#86868b` |
+| `--bg` | `#101013` | `#ffffff` |
+| `--bg-secondary` | `#16161B` | `#f5f5f7` |
+| `--sidebar-bg` | `rgba(20,20,25,.72)` | `rgba(246,246,248,.8)` |
+| `--header-bg` | `rgba(16,16,19,.78)` | `rgba(255,255,255,.8)` |
+| `--text` | `#ECECF1` | `#1d1d1f` |
+| `--text-secondary` | `#A0A0AA` | `#6e6e73` |
+| `--text-dim` | `#7C7C86` | `#86868b` |
 | `--accent` | `#0a84ff` | `#007aff` |
 | `--accent-text` | `#ffffff` | `#ffffff` |
-| `--border` | `rgba(255,255,255,.08)` | `rgba(0,0,0,.10)` |
+| `--border` | `rgba(255,255,255,.07)` | `rgba(0,0,0,.10)` |
 | `--danger` | `#ff453a` | `#ff3b30` |
 | `--success` | `#30d158` | `#34c759` |
 | `--warn` | `#ff9f0a` | `#ff9500` |
-| `--code-bg` | `#101013` | `#f5f5f7` |
-| `--hover-bg` | `rgba(255,255,255,.06)` | `rgba(0,0,0,.04)` |
-| `--active-bg` | `rgba(255,255,255,.10)` | `rgba(0,0,0,.07)` |
+| `--code-bg` | `#1B1B21` | `#f5f5f7` |
+| `--hover-bg` | `rgba(255,255,255,.05)` | `rgba(0,0,0,.04)` |
+| `--active-bg` | `rgba(255,255,255,.09)` | `rgba(0,0,0,.07)` |
 | `--accent-soft` | `rgba(10,132,255,.24)` | `rgba(0,122,255,.15)` |
 | `--danger-soft` | `rgba(255,69,58,.16)` | `rgba(255,59,48,.10)` |
 | `--selection-bg` | `rgba(10,132,255,.30)` | `rgba(0,122,255,.28)` |
 | `--scrollbar-thumb` | `rgba(255,255,255,.18)` | `rgba(0,0,0,.20)` |
-| `--shadow-card` | `0 1px 3px rgba(0,0,0,.6)` | `0 1px 2px rgba(0,0,0,.05), 0 4px 16px rgba(0,0,0,.05)` |
-| `--shadow-modal` | `0 12px 40px rgba(0,0,0,.65)` | `0 12px 40px rgba(0,0,0,.18)` |
+| `--surface-raised` | `#1B1B21` | `#ffffff` |
+| `--shadow-card` | `0 1px 2px rgba(0,0,0,.4)` | `0 1px 2px rgba(0,0,0,.05), 0 4px 16px rgba(0,0,0,.05)` |
+| `--shadow-modal` | `0 12px 40px rgba(0,0,0,.55)` | `0 12px 40px rgba(0,0,0,.18)` |
 | `--radius-l` / `--radius-m` / `--radius-s` | `10px` / `8px` / `6px` | same |
 | `--font-ui` | `-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", …` | same |
 | `--font-mono` | `ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, …` | same |
 
-Black premium = restraint: true-black `--bg`, surfaces lifted one step
-(`#0a0a0d` / `#101013`), 0.5px hairlines instead of shadows (shadows are
-near-invisible on black by design), no gradients anywhere, selection is
-the accent at 30%.
+Charcoal premium (v3) = layered restraint: the base is a warm-neutral
+`#101013` instead of true black, surfaces lift in visible steps
+(`#16161B` → `#1B1B21`), 0.5px hairlines carry definition, shadows stay
+near-invisible, **no gradients anywhere**, selection is the accent at 30%.
+Nothing renders pure black, so dark detail is never crushed.
 
 ### Added tokens (not in the contract, safe to use in JS-injected markup)
 
 - Spacing scale on the 8pt grid: `--space-1:4px` (the sanctioned half-step),
   `--space-2:8px`, `--space-3:16px`, `--space-4:24px`, `--space-5:32px`,
   `--space-6:48px`.
-- `--radius-xl: 12px` (composer card, usage cards).
-- `--surface-raised` (v2) — elevated surface for floating layers (composer
-  card, `.modal`). `#0a0a0d` in dark (lifts off true black), `#ffffff` in
-  light (equals `--bg`). Use this instead of `--bg` for anything that
-  floats.
+- `--radius-xl: 12px` (user bubble, composer card, usage cards).
+- `--surface-raised` — elevated surface for floating/raised layers
+  (`.msg-user` bubble, composer card, `.modal`). `#1B1B21` in dark (lifts
+  off the charcoal base), `#ffffff` in light (equals `--bg`). Use this
+  instead of `--bg` for anything that floats.
 - `--accent-soft`, `--hover-bg`, `--active-bg`, `--danger-soft` — translucent
   state fills that work over any background.
 - `--selection-bg`, `--scrollbar-thumb`.
-- `--shadow-card` (composer), `--shadow-modal` (dialogs).
+- `--shadow-card` (raised cards, user bubble, composer), `--shadow-modal`
+  (dialogs).
+- Motion curves (v3, from the emil-design-eng skill): `--ease-out:
+  cubic-bezier(0.23, 1, 0.32, 1)` for enters/exits and micro-interactions,
+  `--ease-in-out: cubic-bezier(0.77, 0, 0.175, 1)` for on-screen movement.
+  Never use `ease-in` for UI.
 - Metrics: `--titlebar-h: 34px`, `--sidebar-w: 260px`.
 
 ## Type & rhythm
 
-- 13px base UI font, line-height 1.4. Content text (`.md`, `#composer`,
-  `.msg-user`) is 14px for readability; metadata is 11–12px; code is 12px mono.
-- Heading scale in `.md`: 20 / 17 / 15 / 13, weight 600.
+- 13px base UI font, line-height 1.4. Content text (`.md`, `#composer`) is
+  **15px / 1.65** (v3 readability pass); `.msg-user` fallback text is 14px;
+  metadata is 11–12px; code is **13px mono** with `12px 14px` padding.
+- Heading scale in `.md` (v3, refined against the 15px body):
+  21 / 18 / 16 / 15 / 13 / 13, weight 600, 16px top / 8px bottom margins.
+- Paragraphs in `.md` get **12px** vertical spacing; other blocks keep 8px.
 - Numbers that change live (usage values, context meter) use
   `font-variant-numeric: tabular-nums`.
-- Vertical rhythm: 16px between transcript blocks, 32px before a new user
-  turn, 8px between consecutive tool rows. Transcript column is
-  `max-width: 760px`, centered; usage grid is `max-width: 960px`.
+- Vertical rhythm: **20px** between transcript blocks (message gap), 32px
+  before a new user turn, 8px between consecutive tool rows. Transcript
+  column is `max-width: 800px`, centered; usage grid is `max-width: 960px`.
 
 ## Layout decisions
 
@@ -123,8 +133,9 @@ the accent at 30%.
   `#panel-toggle-btn`, `#abort-btn`) rides the header's 8px flex gap and
   never shrinks (`#chat-header > :not(#chat-title) { flex: none }`).
 - `#composer-wrap` is a floating card: 12px radius, 0.5px border,
-  `--surface-raised` fill (lifts off true black in dark), subtle
-  `--shadow-card`, centered at `max-width: 760px` with 16px bottom margin.
+  `--surface-raised` fill (lifts off the charcoal base in dark), subtle
+  `--shadow-card`, centered at `max-width: 800px` (matches the transcript
+  column) with 16px bottom margin.
   `:focus-within` moves the accent ring to the card (textarea itself has no
   outline). The textarea auto-grows via JS and scrolls past `max-height: 160px`.
 - `#usage-view` is a scrollable column: `#quota-cards` wraps a
@@ -149,6 +160,66 @@ footer): transparent pills, 12px label text, 26px minimum hit area,
 an inline `<svg>`, the CSS glyph hides via `:has(svg)` (same convention as
 `#send-btn`). Swarm engaged state hooks (any works): `.on`, `.active`,
 `[aria-pressed="true"]` → accent text on `--accent-soft`.
+
+## v3 messages & readability
+
+- `.msg-user` is now a **raised bubble**: `--surface-raised` fill, 12px
+  radius (`--radius-xl`), `10px 14px` padding, 0.5px hairline all around
+  with a **3px accent left border**, plus a near-invisible `--shadow-card`.
+  It stays full-width inside the 800px transcript column.
+- `.msg-thinking` keeps its v2 spec, which already matches v3: 13px, dim,
+  italic, 2px left hairline, 3-line clamp until `.expanded`.
+- Inline code chips use a border one step stronger than `--border`
+  (`rgba(255,255,255,.12)` in dark; light keeps the v1 hairline) so they
+  read clearly on both the base and raised surfaces.
+- Fenced code blocks: 13px mono, `12px 14px` padding. The `.code-block`
+  header bar is a distinct darker layer (`--bg-secondary` over `--code-bg`)
+  with the language label left-aligned to the code padding; light theme
+  keeps the v1 translucent wash.
+- Tables are **hairline-only**: horizontal 0.5px row separators, no boxed
+  grid; header row keeps the `--bg-secondary` fill.
+
+## Motion (v3) — applied emil-design-eng / review-animations rules
+
+Source: `github.com/emilkowalski/skills` (cloned to `/tmp/emil-skills`),
+skills `emil-design-eng` (philosophy + decision framework) and
+`review-animations` (ten non-negotiable standards + STANDARDS.md values).
+Rules applied to `base/layout/components.css`:
+
+1. **Enters use ease-out, never ease-in** — all entry motion
+   (`.modal-backdrop`, `.modal`, chevrons) runs on the custom strong curve
+   `--ease-out: cubic-bezier(0.23, 1, 0.32, 1)`.
+2. **Micro-interactions stay 150–250ms** — modal 150/180ms, chevrons 150ms,
+   press feedback 160ms, progress fill 250ms.
+3. **Animate transform + opacity only** — one documented exception:
+   `.progress-fill` transitions `width` because usage.js sets the width
+   inline (a transform could not track it); it fires once per data load on
+   4px tracks, so the cost is negligible. Same situation exists in
+   onboarding.css (not owned here).
+4. **No bounce on modals** — `.modal` enters with a 1.03 → 1 settle
+   (opacity + scale), no overshoot; modals keep `transform-origin: center`
+   (they are exempt from the trigger-origin rule).
+5. **Buttons must feel responsive** — `.btn`, `.btn-primary`, `#send-btn`
+   get `transform: scale(0.97)` (0.93 for the round send button) on
+   `:active` with a 160ms ease-out transition. The 26px ghost pills keep
+   their instant background swap instead (pressed tens of times a day —
+   reduced-motion category).
+6. **Spinners/pulses are constant motion and stay as-is** — `tool-spin`
+   (linear), `busy-pulse` (symmetric breathing, opacity+scale), both
+   GPU-only properties.
+7. **`prefers-reduced-motion`** still collapses all animation via the
+   base.css media query.
+
+Audit of files owned by other agents (reported, not edited):
+`onboarding.css` animates `width` on its progress fill (same exception as
+above) and runs 0.35–0.6s splash/card transitions — justified as
+first-run "delight" motion on a strong ease-out curve, but over the 300ms
+UI budget; its indeterminate bar uses `ease-in-out` where constant motion
+should be `linear`. `search.css` is exemplary (160ms palette enter on a
+strong curve, transform+opacity); its 1.2s `search-highlight-flash`
+animates `background-color`/`box-shadow` (paint properties) — a minor
+perf note, acceptable for a one-shot attention flash. `panel.css` pulses
+are opacity-only, compliant. `settings.css` has no animation at all.
 
 ## Component DOM hooks (for chat/shell agents)
 

@@ -88,8 +88,6 @@
           <span id="chat-title"></span>
           <span id="model-label"></span>
           <span id="context-meter"></span>
-          <button id="model-select" class="pill" type="button" title="Select model" data-i18n-title="options.model.pick"></button>
-          <button id="swarm-toggle" class="pill" type="button" hidden></button>
           <button id="panel-toggle-btn" type="button" title="Agent panel" aria-label="Agent panel"
                   data-i18n-title="panel.toggle" data-i18n-aria="panel.toggle">
             <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
@@ -109,6 +107,14 @@
               <path d="M7 12V2M3 6l4-4 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </button>
+          <!-- v3 composer options row: model / swarm / thinking-effort pills
+               (chat-options.js binds these; wraps below the textarea via CSS). -->
+          <div id="composer-options">
+            <button id="model-select" class="pill" type="button"
+                    title="Select model — applies to this chat" data-i18n-title="options.model.pick_title"></button>
+            <button id="swarm-toggle" class="pill" type="button" hidden></button>
+            <button id="effort-select" class="pill" type="button" hidden></button>
+          </div>
         </div>
       </section>
       <section id="usage-view" hidden>

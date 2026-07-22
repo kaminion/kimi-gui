@@ -190,6 +190,36 @@ class KimiClient extends EventEmitter {
   }
 
   /**
+   * Rename a session (v3; verified live on 0.28.1: POST /profile {title} —
+   * the session list and on-disk state.json reflect it, isCustomTitle is set
+   * server-side). Matches the official web UI's updateSession (webui-bundle).
+   */
+  renameSession(id, title) {
+    return this.request('POST', `/sessions/${encodeURIComponent(id)}/profile`, {
+      title: String(title),
+    });
+  }
+
+  /**
+   * Set the session's thinking effort (v3; verified live: POST /profile
+   * {agent_config:{thinking:'off'|'low'|'high'|'max'}} — GET /status then
+   * reports thinking_level; the server does not validate the value).
+   */
+  setSessionThinking(id, thinking) {
+    return this.request('POST', `/sessions/${encodeURIComponent(id)}/profile`, {
+      agent_config: { thinking: String(thinking) },
+    });
+  }
+
+  /**
+   * Soft-delete a session (v3; verified live: POST :archive {} ->
+   * {archived:true}; the session list filter already hides archived entries).
+   */
+  archiveSession(id) {
+    return this.request('POST', `/sessions/${encodeURIComponent(id)}:archive`, {});
+  }
+
+  /**
    * Background tasks for a session (subagent/bash/tool):
    * [{id, session_id, kind, description, status, command?, created_at, ...}].
    */

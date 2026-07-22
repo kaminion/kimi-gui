@@ -1,15 +1,26 @@
-/* chat-options.js — chat-header affordances (v2).
+/* chat-options.js — composer options row (v3).
  * window.ChatOptions = { init(), refresh(sessionId) }
  *
- * #model-select pill (shell-owned button) opens a custom dropdown: models from
- * window.kimi.listModels(); picking one calls window.kimi.setSessionModel() and
- * persists the alias per session (localStorage). Pill label = per-session
- * override, else the server default model (getState().defaultModel).
+ * The options cluster lives in #composer-options (inside #composer-wrap, below
+ * the textarea) since v3; v2 kept it in the chat header.
+ *
+ * #model-select opens a custom dropdown: models from window.kimi.listModels();
+ * picking one calls window.kimi.setSessionModel() and persists the alias per
+ * session (localStorage). Pill label = per-session override, else the session's
+ * server-side model, else the server default (getState().defaultModel).
  * Pill stays hidden when listModels is not exposed by the preload.
  *
- * #swarm-toggle (shell-owned, starts hidden) is shown ONLY when
- * window.kimi.setSessionSwarm exists (i.e. M1 discovered a swarm endpoint).
- * State is per-session, optimistic UI with revert on failure.
+ * #swarm-toggle is shown ONLY when window.kimi.setSessionSwarm exists (the cli
+ * engine exposes it; the direct engine omits it, per CONTRACT-V3). State is
+ * per-session, optimistic UI with revert on failure.
+ *
+ * #effort-select (v3) is shown ONLY when window.kimi.setSessionEffort exists.
+ * Per-session thinking level off/low/high/max (끄기/낮음/높음/최대, default
+ * 높음) persisted in localStorage 'kimi.sessionEffort.<sid>'; selecting a level
+ * calls setSessionEffort() optimistically and reverts on failure. Dropdown
+ * styling/behavior is identical to the model dropdown (same .model-dropdown
+ * classes), anchored to the pill and flipped above it when near the window
+ * bottom — the composer sits at the bottom edge, so this is the common case.
  *
  * All copy via T() ('options.*' keys, Korean fallback).
  */
@@ -20,12 +31,19 @@
 
   const LS_MODEL = 'kimi.sessionModel.'; // + sessionId -> model alias
   const LS_SWARM = 'kimi.sessionSwarm.'; // + sessionId -> '1' | '0'
+  const LS_EFFORT = 'kimi.sessionEffort.'; // + sessionId -> 'off'|'low'|'high'|'max'
+
+  const EFFORT_LEVELS = ['off', 'low', 'high', 'max'];
+  const DEFAULT_EFFORT = 'high';
+  const EFFORT_FALLBACKS = { off: '끄기', low: '낮음', high: '높음', max: '최대' };
 
   const $ = (sel) => document.querySelector(sel);
 
-  let pill = null;      // #model-select
-  let swarmBtn = null;  // #swarm-toggle
-  let dropdown = null;  // open .model-dropdown element (null = closed)
+  let modelPill = null;   // #model-select
+  let swarmBtn = null;    // #swarm-toggle
+  let effortPill = null;  // #effort-select
+  let dropdown = null;    // open .model-dropdown element (null = closed)
+  let dropdownOwner = null; // pill the open dropdown is anchored to
 
   function lsGet(key) { try { return localStorage.getItem(key); } catch (_) { return null; } }
   function lsSet(key, val) { try { localStorage.setItem(key, val); } catch (_) { /* ignore */ } }
@@ -34,6 +52,101 @@
     const st = window.App?.state;
     return st?.activeSessionId ?? st?.activeId ?? null;
   }
+
+  /* ---- shared dropdown machinery (model + effort) ---- */
+
+  function closeDropdown(restoreFocus) {
+    if (dropdown) dropdown.remove();
+    const owner = dropdownOwner;
+    dropdown = null;
+    dropdownOwner = null;
+    document.removeEventListener('mousedown', onDocMouseDown, true);
+    document.removeEventListener('keydown', onDropdownKey, true);
+    if (restoreFocus) owner?.focus?.();
+  }
+
+  function onDocMouseDown(e) {
+    if (!dropdown) return;
+    if (dropdown.contains(e.target) || dropdownOwner?.contains(e.target)) return;
+    closeDropdown();
+  }
+
+  function onDropdownKey(e) {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      closeDropdown(true);
+    }
+  }
+
+  /** Anchor the dropdown to its owner pill; clamp horizontally, flip above
+   * the pill when it would overflow the bottom of the window (composer row
+   * sits at the bottom edge). Safe to call again after content changes. */
+  function placeDropdown() {
+    if (!dropdown || !dropdownOwner) return;
+    const r = dropdownOwner.getBoundingClientRect();
+    dropdown.style.left = `${Math.max(8, r.left)}px`;
+    dropdown.style.top = `${r.bottom + 4}px`;
+    let dr = dropdown.getBoundingClientRect();
+    if (dr.right > window.innerWidth - 8) {
+      dropdown.style.left = `${Math.max(8, window.innerWidth - 8 - dr.width)}px`;
+    }
+    dr = dropdown.getBoundingClientRect();
+    if (dr.bottom > window.innerHeight - 8) {
+      dropdown.style.top = `${Math.max(8, r.top - dr.height - 4)}px`;
+    }
+  }
+
+  function dropdownItem(label, current, onSelect) {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'model-dropdown-item';
+    item.setAttribute('role', 'option');
+    const check = document.createElement('span');
+    check.className = 'model-dropdown-check';
+    check.textContent = label === current ? '✓' : '';
+    const text = document.createElement('span');
+    text.className = 'model-dropdown-label';
+    text.textContent = label;
+    item.append(check, text);
+    if (label === current) {
+      item.classList.add('current');
+      item.setAttribute('aria-selected', 'true');
+    }
+    item.addEventListener('click', () => void onSelect());
+    return item;
+  }
+
+  function dropdownNote(text) {
+    const note = document.createElement('div');
+    note.className = 'model-dropdown-note';
+    note.textContent = text;
+    return note;
+  }
+
+  /** Open (or replace) a dropdown anchored to `pill`; fill() appends content
+   * and may be async — the dropdown is re-placed once it resolves. */
+  function openDropdown(pill, fill) {
+    closeDropdown();
+    dropdown = document.createElement('div');
+    dropdown.className = 'model-dropdown';
+    dropdown.setAttribute('role', 'listbox');
+    dropdownOwner = pill;
+    document.body.appendChild(dropdown);
+    document.addEventListener('mousedown', onDocMouseDown, true);
+    document.addEventListener('keydown', onDropdownKey, true);
+    placeDropdown();
+    Promise.resolve()
+      .then(() => fill(dropdown))
+      .then(() => placeDropdown())
+      .catch((err) => console.error('dropdown fill failed', err));
+  }
+
+  function toggleDropdownFor(pill, fill) {
+    if (dropdown && dropdownOwner === pill) { closeDropdown(); return; }
+    openDropdown(pill, fill);
+  }
+
+  /* ---- model pill + dropdown ---- */
 
   /** Model alias shown on the pill: per-session override, else the session's
    * server-side model (listSessions), else the server default. */
@@ -47,96 +160,29 @@
     return window.App?.state?.defaultModel ?? null;
   }
 
-  /* ---- model pill + dropdown ---- */
-
-  function updatePillLabel(sessionId) {
-    if (!pill) return;
+  function updateModelPill(sessionId) {
+    if (!modelPill) return;
     const model = currentModel(sessionId);
-    pill.textContent = model || T('options.model.none', '모델');
-    pill.title = T('options.model.pick', '모델 선택');
+    modelPill.textContent = model || T('options.model.none', '모델');
+    modelPill.title = T('options.model.pick_title', '모델 선택 — 현재 대화에 적용');
   }
 
-  function closeDropdown() {
-    if (dropdown) dropdown.remove();
-    dropdown = null;
-    document.removeEventListener('mousedown', onDocMouseDown, true);
-    document.removeEventListener('keydown', onDropdownKey, true);
-  }
-
-  function onDocMouseDown(e) {
-    if (!dropdown) return;
-    if (dropdown.contains(e.target) || pill?.contains(e.target)) return;
-    closeDropdown();
-  }
-
-  function onDropdownKey(e) {
-    if (e.key === 'Escape') {
-      e.stopPropagation();
-      closeDropdown();
-      pill?.focus();
-    }
-  }
-
-  async function toggleDropdown() {
-    if (dropdown) { closeDropdown(); return; }
-    await openDropdown();
-  }
-
-  async function openDropdown() {
-    closeDropdown();
+  async function fillModelDropdown(box) {
     const sid = activeSessionId();
-    dropdown = document.createElement('div');
-    dropdown.className = 'model-dropdown';
-    dropdown.setAttribute('role', 'listbox');
-    const note = document.createElement('div');
-    note.className = 'model-dropdown-note';
-    note.textContent = T('options.model.loading', '불러오는 중…');
-    dropdown.appendChild(note);
-    // Anchor to the pill (fixed: immune to overflow/clipping ancestors).
-    const r = pill.getBoundingClientRect();
-    dropdown.style.left = `${Math.max(8, r.left)}px`;
-    dropdown.style.top = `${r.bottom + 4}px`;
-    document.body.appendChild(dropdown);
-    document.addEventListener('mousedown', onDocMouseDown, true);
-    document.addEventListener('keydown', onDropdownKey, true);
-
+    box.appendChild(dropdownNote(T('options.model.loading', '불러오는 중…')));
     let models = [];
     try { models = (await window.kimi.listModels()) ?? []; }
     catch (err) { console.error('listModels failed', err); }
-    if (!dropdown) return; // closed while loading
-    dropdown.textContent = '';
+    if (box !== dropdown) return; // closed/replaced while loading
+    box.textContent = '';
     if (!Array.isArray(models) || !models.length) {
-      const empty = document.createElement('div');
-      empty.className = 'model-dropdown-note';
-      empty.textContent = T('options.model.empty', '사용 가능한 모델이 없습니다');
-      dropdown.appendChild(empty);
+      box.appendChild(dropdownNote(T('options.model.empty', '사용 가능한 모델이 없습니다')));
       return;
     }
     const current = currentModel(sid);
     for (const m of models) {
       const alias = m?.alias ?? m?.model ?? String(m);
-      const item = document.createElement('button');
-      item.type = 'button';
-      item.className = 'model-dropdown-item';
-      item.setAttribute('role', 'option');
-      const check = document.createElement('span');
-      check.className = 'model-dropdown-check';
-      check.textContent = alias === current ? '✓' : '';
-      const label = document.createElement('span');
-      label.className = 'model-dropdown-label';
-      label.textContent = alias;
-      item.append(check, label);
-      if (alias === current) {
-        item.classList.add('current');
-        item.setAttribute('aria-selected', 'true');
-      }
-      item.addEventListener('click', () => void selectModel(alias));
-      dropdown.appendChild(item);
-    }
-    // Keep the dropdown inside the window horizontally.
-    const dr = dropdown.getBoundingClientRect();
-    if (dr.right > window.innerWidth - 8) {
-      dropdown.style.left = `${Math.max(8, window.innerWidth - 8 - dr.width)}px`;
+      box.appendChild(dropdownItem(alias, current, () => selectModel(alias)));
     }
   }
 
@@ -147,7 +193,7 @@
     try {
       await window.kimi.setSessionModel(sid, alias);
       lsSet(LS_MODEL + sid, alias);
-      updatePillLabel(sid);
+      updateModelPill(sid);
     } catch (err) {
       console.error('setSessionModel failed', err);
     }
@@ -165,9 +211,7 @@
     const on = swarmEnabled(sid);
     swarmBtn.classList.toggle('on', on);
     swarmBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
-    swarmBtn.title = on
-      ? T('options.swarm.on', '스웜 모드 켜짐')
-      : T('options.swarm.off', '스웜 모드 꺼짐');
+    swarmBtn.title = T('options.swarm.title', 'Swarm — 병렬 서브에이전트로 탐색/작업');
   }
 
   async function toggleSwarm() {
@@ -185,23 +229,69 @@
     }
   }
 
+  /* ---- effort pill + dropdown (v3) ---- */
+
+  function currentEffort(sid) {
+    const stored = sid ? lsGet(LS_EFFORT + sid) : null;
+    return EFFORT_LEVELS.includes(stored) ? stored : DEFAULT_EFFORT;
+  }
+
+  function effortLabel(level) {
+    return T(`options.effort.${level}`, EFFORT_FALLBACKS[level] || level);
+  }
+
+  function updateEffortPill(sid) {
+    if (!effortPill || effortPill.hidden) return;
+    effortPill.textContent = effortLabel(currentEffort(sid));
+    effortPill.title = T(
+      'options.effort.title',
+      '사고 수준 — 높을수록 깊이 추론하지만 느려질 수 있습니다'
+    );
+  }
+
+  function fillEffortDropdown(box) {
+    const current = effortLabel(currentEffort(activeSessionId()));
+    for (const level of EFFORT_LEVELS) {
+      box.appendChild(dropdownItem(effortLabel(level), current, () => selectEffort(level)));
+    }
+  }
+
+  async function selectEffort(level) {
+    const sid = activeSessionId();
+    closeDropdown();
+    if (!sid) return; // draft chat: nothing to persist against
+    const prev = currentEffort(sid);
+    lsSet(LS_EFFORT + sid, level); // optimistic
+    updateEffortPill(sid);
+    try {
+      await window.kimi.setSessionEffort(sid, level);
+    } catch (err) {
+      console.error('setSessionEffort failed', err);
+      lsSet(LS_EFFORT + sid, prev); // revert
+      updateEffortPill(sid);
+    }
+  }
+
   /* ---- public API ---- */
 
-  /** Wire header buttons. Idempotent; safe to call again after DOM changes. */
+  /** Wire option pills. Idempotent; safe to call again after DOM changes. */
   function init() {
-    pill = $('#model-select');
+    modelPill = $('#model-select');
     swarmBtn = $('#swarm-toggle');
-    if (pill) {
+    effortPill = $('#effort-select');
+    if (modelPill) {
       if (typeof window.kimi?.listModels !== 'function') {
-        pill.hidden = true;
-      } else if (!pill.dataset.chatOptionsWired) {
-        pill.dataset.chatOptionsWired = '1';
-        pill.addEventListener('click', () => void toggleDropdown());
+        modelPill.hidden = true;
+      } else if (!modelPill.dataset.chatOptionsWired) {
+        modelPill.dataset.chatOptionsWired = '1';
+        modelPill.addEventListener('click', () =>
+          toggleDropdownFor(modelPill, fillModelDropdown)
+        );
       }
     }
     if (swarmBtn) {
       if (typeof window.kimi?.setSessionSwarm !== 'function') {
-        swarmBtn.hidden = true; // no swarm endpoint discovered: stays hidden
+        swarmBtn.hidden = true; // engine without swarm (e.g. direct): stays hidden
       } else {
         swarmBtn.hidden = false;
         if (!swarmBtn.dataset.chatOptionsWired) {
@@ -210,15 +300,32 @@
         }
       }
     }
+    if (effortPill) {
+      if (typeof window.kimi?.setSessionEffort !== 'function') {
+        effortPill.hidden = true; // preload too old / engine without effort: hidden
+      } else if (!effortPill.dataset.chatOptionsWired) {
+        effortPill.hidden = false;
+        effortPill.dataset.chatOptionsWired = '1';
+        effortPill.addEventListener('click', () =>
+          toggleDropdownFor(effortPill, fillEffortDropdown)
+        );
+      } else {
+        effortPill.hidden = false; // API appeared after an earlier init
+      }
+    }
     refresh(activeSessionId());
   }
 
-  /** Re-sync pill label + swarm state with a (possibly new) active session. */
+  /** Re-sync pill labels + toggle state with a (possibly new) active session. */
   function refresh(sessionId) {
     const sid = sessionId ?? activeSessionId();
-    if (pill && !pill.hidden) updatePillLabel(sid);
+    if (modelPill && !modelPill.hidden) updateModelPill(sid);
     if (swarmBtn && !swarmBtn.hidden) updateSwarm(sid);
+    if (effortPill && !effortPill.hidden) updateEffortPill(sid);
   }
+
+  // Language change: re-apply translated pill labels/tooltips in place.
+  window.I18N?.onChange?.(() => refresh(activeSessionId()));
 
   window.ChatOptions = { init, refresh };
 })();

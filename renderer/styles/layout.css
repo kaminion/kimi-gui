@@ -3,8 +3,8 @@
    Window chrome and view structure: titlebar, sidebar, main column,
    chat header, transcript rhythm, composer card, usage grid.
    All ids below are fixed by ARCHITECTURE.md / CONTRACT-V2 DOM contracts.
-   Dark-first: surfaces are lifted off true black via --surface-raised and
-   --bg-secondary; definition comes from 0.5px hairlines, not shadows.
+   Dark-first: surfaces are lifted off the charcoal base via --surface-raised
+   and --bg-secondary; definition comes from 0.5px hairlines, not shadows.
    ========================================================================== */
 
 body {
@@ -119,7 +119,7 @@ body {
   height: 10px;
   color: var(--text-dim);
   transform: rotate(90deg); /* expanded by default: right-pointing glyph → down */
-  transition: transform 0.15s ease;
+  transition: transform 0.15s var(--ease-out);
 }
 
 /* sidebar.js renders .session-group-name + .session-group-count inside the
@@ -327,7 +327,7 @@ body {
   text-overflow: ellipsis;
 }
 
-/* ---- Transcript: centered 760px column, generous rhythm ---- */
+/* ---- Transcript: centered 800px column, generous rhythm (v3 readability) ---- */
 #transcript {
   flex: 1;
   min-height: 0;
@@ -337,13 +337,14 @@ body {
 }
 
 #transcript > * {
-  max-width: 760px;
+  max-width: 800px;
   margin-left: auto;
   margin-right: auto;
 }
 
+/* Message gap: 20px (CONTRACT-V3; off-grid on purpose) */
 #transcript > * + * {
-  margin-top: var(--space-3);
+  margin-top: 20px;
 }
 
 /* New turn gets extra separation (id specificity needed to beat the rule above) */
@@ -356,14 +357,14 @@ body {
   margin-top: var(--space-2);
 }
 
-/* ---- Composer: floating rounded card, lifted one step off pure black ---- */
+/* ---- Composer: floating rounded card, lifted one step off the base ---- */
 #composer-wrap {
   flex: none;
   display: flex;
   align-items: flex-end;
   gap: var(--space-2);
   width: calc(100% - var(--space-5)); /* 16px gutters */
-  max-width: 760px;
+  max-width: 800px; /* matches the v3 transcript column */
   margin: 0 auto var(--space-3);
   padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
   background: var(--surface-raised);
@@ -400,4 +401,175 @@ body {
 #session-usage {
   max-width: 960px;
   margin: var(--space-4) auto 0;
+}
+
+/* ==========================================================================
+   sidebar v3 (R1) — custom groups, HTML5 drag & drop, inline rename,
+   hover session actions. ADDITIVE block: new selectors only; nothing above
+   is restyled. R3 preserves appended blocks.
+   ========================================================================== */
+
+/* Positioning context for #group-unassign-zone (visuals unchanged). */
+#sidebar {
+  position: relative;
+}
+
+/* Custom groups section pinned above the auto project groups. */
+#custom-groups-section {
+  margin-bottom: var(--space-3);
+}
+
+.custom-groups-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+}
+
+.custom-groups-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  user-select: none;
+}
+
+.custom-group-add {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--text-dim);
+  border-radius: var(--radius-s);
+}
+
+.custom-group-add:hover {
+  background: var(--hover-bg);
+  color: var(--text);
+}
+
+.custom-group + .custom-group {
+  margin-top: var(--space-2);
+}
+
+/* Group delete '×': appears on header hover, before the trailing count. */
+.custom-group-delete {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--text-dim);
+  border-radius: var(--radius-s);
+  opacity: 0;
+}
+
+.custom-group-label:hover .custom-group-delete,
+.custom-group-delete:focus-visible {
+  opacity: 1;
+}
+
+.custom-group-delete:hover {
+  background: var(--hover-bg);
+  color: var(--danger);
+}
+
+/* Drop-target highlight on custom group header + container. */
+.custom-group.drop-target {
+  background: var(--accent-soft);
+  border-radius: var(--radius-m);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+/* '그룹 해제' zone: pinned at the sidebar bottom while body.dnd-active. */
+#group-unassign-zone {
+  position: absolute;
+  left: var(--space-2);
+  right: var(--space-2);
+  bottom: 44px; /* just above #sidebar-footer */
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2);
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--surface-raised);
+  border: 0.5px dashed var(--border);
+  border-radius: var(--radius-m);
+  user-select: none;
+}
+
+#group-unassign-zone[hidden] {
+  display: none;
+}
+
+#group-unassign-zone.drop-target {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* Hover session actions: rename (pencil) + delete (trash), top-right. */
+.session-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 2px;
+  padding: 1px;
+  border-radius: var(--radius-s);
+  background: var(--bg-secondary);
+  opacity: 0;
+}
+
+.session-item:hover .session-actions,
+.session-actions:focus-within {
+  opacity: 1;
+}
+
+.session-action {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  border-radius: var(--radius-s);
+}
+
+.session-action:hover {
+  background: var(--hover-bg);
+  color: var(--text);
+}
+
+.session-action.session-delete:hover {
+  color: var(--danger);
+}
+
+/* Inline rename inputs (session title + custom group name). */
+.inline-input {
+  width: 100%;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg-secondary);
+  border: 0.5px solid var(--accent);
+  border-radius: var(--radius-s);
+  padding: 1px 4px;
+  outline: none;
+}
+
+.session-group-label .inline-input {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 600;
 }

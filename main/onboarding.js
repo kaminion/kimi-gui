@@ -1,41 +1,36 @@
 'use strict';
 
 /**
- * onboarding.js — first-run onboarding for Kimi Desktop (CONTRACT-V2, M1).
+ * onboarding.js — first-run onboarding for Kimi Desktop (CONTRACT-V3, B3).
  *
- * Covers the two things the app needs before the backend can start:
- *   1. the Kimi Code CLI binary (auto-install via the official installer), and
- *   2. a Kimi login (device authorization flow via `kimi login`).
+ * V3: the app works WITHOUT the Kimi Code CLI (default 'direct' engine), so
+ * the gate is login-only and engine-independent:
  *
- * Exports:
  *   getOnboardingState({ withVersion? } = {})
  *     -> { cliInstalled, cliPath, cliVersion, loggedIn, needsOnboarding }
  *        cliInstalled: resolveKimiPath() (./server-manager) succeeds.
  *        cliVersion:   first line of `kimi --version` (5s timeout, best-effort).
- *        loggedIn:     <KIMI_CODE_HOME|~/.kimi-code>/credentials/kimi-code.json
- *                      parses and has a non-empty access_token.
- *        needsOnboarding = !cliInstalled || !loggedIn.
- *   installCli(send) -> { ok, cliPath }
- *     Downloads the official installer and runs it (bash on POSIX, PowerShell
- *     on Windows — never sudo):
- *       macOS/Linux: curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash
- *       Windows:     irm https://code.kimi.com/kimi-code/install.ps1 | iex
- *     Both install the native binary to <home>/.kimi-code/bin/kimi[.exe] without
- *     touching the system. Progress is pushed as
- *       send({ type:'onboarding', phase:'install', step, message })
- *     (`step` is a snake_case machine key so the renderer can localize via T();
- *     `message` is a Korean fallback / raw installer line).
- *   startLogin(send) -> { verificationUrl, userCode }
- *     Spawns `kimi login` and regex-parses the device-flow verification URL and
- *     user code from its output (observed on stderr, both streams scanned):
- *       "Opening browser for Kimi device login: https://www.kimi.com/code/authorize_device?user_code=XXXX-XXXX"
- *       "If the browser did not open, paste the URL above and enter code: XXXX-XXXX"
- *     On child exit pushes send({ type:'onboarding', phase:'login', status:'done'|'error', message? }).
- *     If the CLI reports an existing login instead of a device flow, the promise
- *     rejects with err.code === 'ALREADY_LOGGED_IN' and status 'done' is pushed.
+ *        loggedIn:     B1 ./auth.isLoggedIn() (falls back to reading
+ *                      <KIMI_CODE_HOME|~/.kimi-code>/credentials/kimi-code.json
+ *                      when the auth module is absent).
+ *        needsOnboarding = !loggedIn   (engine-independent — CONTRACT-V3)
+ *
+ *   startLogin(send) -> { verificationUrl, userCode, verificationUrlComplete? }
+ *     Delegates to B1 ./auth's OAuth device flow (RFC 8628, in-app — no CLI,
+ *     no child process). auth.startDeviceLogin() begins background polling;
+ *     completion arrives via auth.onLoginDone(cb) and is pushed as
+ *       send({ type:'onboarding', phase:'login', status:'done'|'error', message? }).
+ *     When a valid login already exists, the promise rejects with
+ *     err.code === 'ALREADY_LOGGED_IN' and status 'done' is pushed (v2 shape).
+ *
  *   cancelLogin() -> { ok }
- *     Kills the in-flight `kimi login` child (exit then pushes status 'error'
- *     with message 'cancelled').
+ *     Cancels the in-flight device flow and pushes the terminal
+ *     { phase:'login', status:'error', message:'cancelled' } immediately.
+ *
+ *   installCli(send) -> { ok, cliPath }
+ *     Unchanged from v2 — downloads the official installer and runs it (bash
+ *     on POSIX, PowerShell on Windows — never sudo). Only reachable from
+ *     settings (engine section), not from the first-run gate.
  *
  * Never logs credential contents or tokens.
  */
@@ -56,15 +51,10 @@ const MANUAL_INSTALL_URL = 'https://www.kimi.com/help/kimi-code/cli-getting-star
 
 const VERSION_TIMEOUT_MS = 5000;
 const DOWNLOAD_TIMEOUT_MS = 30000;
-const LOGIN_PARSE_TIMEOUT_MS = 60000;
 
 const ANSI_RE = /\x1b\[[0-9;]*m/g;
-// Device-flow lines printed by `kimi login` (verified live against 0.28.1).
-const LOGIN_URL_RE = /https:\/\/\S*authorize_device\S*/i;
-const LOGIN_CODE_RE = /(?:enter code|user_code)[:=]\s*([A-Za-z0-9-]+)/i;
-const ALREADY_LOGGED_IN_RE = /^Logged in to /m;
 
-/** Kimi Code home directory ( honors KIMI_CODE_HOME like the CLI does). */
+/** Kimi Code home directory (honors KIMI_CODE_HOME like the CLI does). */
 function kimiHome() {
   return process.env.KIMI_CODE_HOME || path.join(os.homedir(), '.kimi-code');
 }
@@ -78,6 +68,29 @@ function checkLoggedIn() {
   } catch {
     return false;
   }
+}
+
+/** B1's auth module, lazy + guarded (parallel-swarm deliverable). */
+let authMod = null;
+function loadAuth() {
+  if (authMod) return authMod;
+  try {
+    // eslint-disable-next-line global-require
+    authMod = require('./auth');
+  } catch {
+    authMod = null;
+  }
+  return authMod;
+}
+
+function isLoggedIn() {
+  const auth = loadAuth();
+  try {
+    if (auth && typeof auth.isLoggedIn === 'function') return !!auth.isLoggedIn();
+  } catch {
+    /* fall through to the file check */
+  }
+  return checkLoggedIn();
 }
 
 /** `kimi --version`, first output line; null on any failure (5s cap). */
@@ -118,14 +131,13 @@ async function getOnboardingState({ withVersion = true } = {}) {
     cliPath = null; // KIMI_CLI_NOT_FOUND or not executable
   }
   const cliVersion = cliPath && withVersion ? await getCliVersion(cliPath) : null;
-  const loggedIn = checkLoggedIn();
-  const cliInstalled = Boolean(cliPath);
+  const loggedIn = isLoggedIn();
   return {
-    cliInstalled,
+    cliInstalled: Boolean(cliPath),
     cliPath,
     cliVersion,
     loggedIn,
-    needsOnboarding: !cliInstalled || !loggedIn,
+    needsOnboarding: !loggedIn, // engine-independent (CONTRACT-V3)
   };
 }
 
@@ -232,17 +244,39 @@ async function installCli(send) {
 }
 
 // ----------------------------------------------------------------- login ----
+// V3: in-app OAuth device flow via B1's ./auth (no `kimi login` child).
 
-/** @type {import('node:child_process').ChildProcess | null} */
-let loginChild = null;
-let loginPush = null;     // send() of the in-flight attempt, for instant cancel feedback
+let loginPush = null;      // send() of the in-flight attempt, for instant cancel feedback
 let loginNotified = false; // a terminal status was already pushed
+let loginHookAuth = null;  // auth instance the onLoginDone hook is bound to
+
+/** Register auth.onLoginDone once; forwards completion to the active attempt. */
+function ensureLoginHook(auth) {
+  if (loginHookAuth === auth || typeof auth.onLoginDone !== 'function') return;
+  loginHookAuth = auth;
+  auth.onLoginDone((result) => {
+    if (loginNotified || !loginPush) return;
+    loginNotified = true;
+    const r = result && typeof result === 'object' ? result : {};
+    const failed = r.error || r.ok === false || r.success === false;
+    if (failed) {
+      const message = typeof r.error === 'string' ? r.error : (r.message ?? 'login failed');
+      loginPush({ status: 'error', message });
+    } else {
+      loginPush({ status: 'done' });
+    }
+  });
+}
 
 /**
- * Spawn `kimi login`, parse the device-flow URL + code, resolve with them.
- * Completion is reported via push events (see header comment).
+ * Start the OAuth device flow. Resolves with {verificationUrl, userCode};
+ * completion is reported via push events (see header comment).
  */
 async function startLogin(send) {
+  const auth = loadAuth();
+  if (!auth || typeof auth.startDeviceLogin !== 'function') {
+    throw new Error('login is unavailable (main/auth.js not installed)');
+  }
   cancelLogin(); // drop any dangling attempt before starting a new one
   const push = (payload) => {
     try {
@@ -252,117 +286,51 @@ async function startLogin(send) {
     }
   };
 
-  const cliPath = await resolveKimiPath(); // throws when the CLI is missing
   loginNotified = false;
   loginPush = push;
-  const child = spawn(cliPath, ['login'], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
-  child._kimiLoginCancelled = false; // per-attempt flag: a superseded child's
-  loginChild = child;                // late 'close' must not touch the new attempt
+  ensureLoginHook(auth);
 
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    let buffer = '';
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      killLogin(false); // no 'cancelled' status here — the rejection says why
-      reject(new Error('timed out waiting for the login verification URL'));
-    }, LOGIN_PARSE_TIMEOUT_MS);
-
-    const finish = (err, value) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      if (err) reject(err);
-      else resolve(value);
-    };
-
-    const tryParse = (chunk) => {
-      buffer += chunk.toString().replace(ANSI_RE, '');
-      if (settled) return;
-      const urlMatch = LOGIN_URL_RE.exec(buffer);
-      if (!urlMatch) return;
-      const verificationUrl = urlMatch[0];
-      const codeMatch = LOGIN_CODE_RE.exec(buffer);
-      // Fallback: the URL itself carries ?user_code=XXXX-XXXX.
-      const userCode = codeMatch
-        ? codeMatch[1]
-        : (/[?&]user_code=([A-Za-z0-9-]+)/.exec(verificationUrl) || [])[1];
-      if (verificationUrl && userCode) finish(null, { verificationUrl, userCode });
-    };
-
-    child.stdout.on('data', tryParse); // observed on stderr; scan both to be safe
-    child.stderr.on('data', tryParse);
-
-    child.on('error', (err) => {
-      loginChild = null;
-      loginNotified = true;
-      push({ status: 'error', message: err.message });
-      finish(err);
-    });
-
-    // 'close' (not 'exit'): stdio is flushed by then, so `buffer` holds the
-    // final lines (e.g. the "Logged in to ..." short-circuit) when we check.
-    child.on('close', (code, signal) => {
-      if (loginChild === child) loginChild = null;
-      if (child._kimiLoginCancelled) {
-        // Status was already pushed by cancelLogin(); nothing more to do.
-        finish(new Error('login cancelled'));
-        return;
-      }
-      if (code === 0) {
-        if (!settled && ALREADY_LOGGED_IN_RE.test(buffer)) {
-          // `kimi login` short-circuits when a valid login already exists.
-          const err = new Error('already logged in');
-          err.code = 'ALREADY_LOGGED_IN';
-          loginNotified = true;
-          push({ status: 'done' });
-          finish(err);
-          return;
-        }
-        loginNotified = true;
-        push({ status: 'done' });
-        if (!settled) {
-          finish(new Error(`kimi login exited (code 0) without a verification URL: ${buffer.slice(-200)}`));
-        }
-        return;
-      }
-      loginNotified = true;
-      const message = `kimi login exited (code ${code}, signal ${signal})`;
-      push({ status: 'error', message });
-      finish(new Error(message));
-    });
-  });
-}
-
-/** Kill the in-flight login child without touching flags. Returns whether one was running. */
-function killLogin(cancelled) {
-  const child = loginChild;
-  loginChild = null;
-  if (!child || child.exitCode !== null || child.signalCode !== null) {
-    return false;
+  if (isLoggedIn()) {
+    loginNotified = true;
+    push({ status: 'done' });
+    const err = new Error('already logged in');
+    err.code = 'ALREADY_LOGGED_IN';
+    throw err;
   }
-  child._kimiLoginCancelled = Boolean(cancelled);
-  try {
-    child.kill();
-  } catch {
-    /* already gone */
+
+  const flow = await auth.startDeviceLogin();
+  const f = flow && typeof flow === 'object' ? flow : {};
+  const verificationUrl = f.verificationUrl ?? f.verificationUri ?? f.verification_uri ?? '';
+  const userCode = f.userCode ?? f.user_code ?? '';
+  const verificationUrlComplete =
+    f.verificationUrlComplete ?? f.verificationUriComplete ?? f.verification_uri_complete ?? undefined;
+  if (!verificationUrl || !userCode) {
+    throw new Error('device flow did not return a verification URL and user code');
   }
-  return true;
+  return { verificationUrl, userCode, ...(verificationUrlComplete ? { verificationUrlComplete } : {}) };
 }
 
 /**
- * Kill the in-flight `kimi login` child. Pushes the terminal
- * {phase:'login', status:'error', message:'cancelled'} immediately (the
- * 'close' event may lag when grandchildren hold the pipes open).
+ * Cancel the in-flight device flow. Pushes the terminal
+ * {phase:'login', status:'error', message:'cancelled'} immediately.
  */
 function cancelLogin() {
-  if (!killLogin(true)) return { ok: false };
+  const auth = loadAuth();
+  let cancelled = false;
+  try {
+    if (auth && typeof auth.cancelLogin === 'function') {
+      auth.cancelLogin();
+      cancelled = true;
+    }
+  } catch {
+    /* auth module may be absent */
+  }
   if (loginPush && !loginNotified) {
     loginNotified = true;
     loginPush({ status: 'error', message: 'cancelled' });
+    cancelled = true;
   }
-  return { ok: true };
+  return { ok: cancelled };
 }
 
 module.exports = {
@@ -372,5 +340,6 @@ module.exports = {
   cancelLogin,
   // Exported for tests / other main modules:
   checkLoggedIn,
+  isLoggedIn,
   kimiHome,
 };

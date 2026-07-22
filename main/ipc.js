@@ -2,27 +2,24 @@
 
 /**
  * ipc.js — registers every `kimi:<name>` ipcMain.handle backing the window.kimi
- * preload API, plus push-event forwarding from KimiClient to the renderer via
- * webContents.send('kimi:event', payload).
+ * preload API.
  *
  * registerIpc({
- *   getClient,    // () => KimiClient | null (null until the server is up / after failure)
- *   getAppState,  // () => ({ ready, version, defaultModel, error? })
- *   getToken,     // () => string | null   (server bearer token; never logged)
- *   getWindow,    // () => BrowserWindow | null
- *   broadcast,    // (payload) => void     (already targets the main window)
- *   retryBackend, // () => Promise<state>  (re-run the KimiClient launch after onboarding)
+ *   backend,   // ./backend facade — the ONLY path for session/chat methods (v3)
+ *   getWindow, // () => BrowserWindow | null
+ *   broadcast, // (payload) => void     (already targets the main window)
  * })
  *
- * wireClientEvents(client, broadcast) attaches 'event'/'usage'/'status'
- * forwarding to a freshly launched client.
+ * V3 (CONTRACT-V3, B3): every session/chat handler routes through ./backend,
+ * which dispatches to the active engine ('direct' | 'cli'). New handlers:
+ * renameSession, deleteSession, setSessionEffort, setEngine, getDailyUsage
+ * (B4's ./usage-stats, lazy) — plus a synchronous `kimi:capabilitiesSync`
+ * channel the preload uses to omit engine-specific methods (e.g.
+ * setSessionSwarm is cli-only).
  *
- * V2 (CONTRACT-V2): onboarding (CLI install + login) backed by ./onboarding,
- * listModels/setSessionModel/setSessionSwarm/listTasks on the client, and
- * lazy cross-agent modules: ./search (M2 — searchAll) and ./updater (M3 —
- * register({ipcMain, send}) wiring kimi:updateCheck / kimi:updateQuitAndInstall).
- * Missing lazy modules degrade to a thrown Error (search/onboarding) or a
- * graceful {status:'dev'} fallback (updates) — never a crash.
+ * Kept from v2: onboarding (CLI install + login) via ./onboarding, ./quota,
+ * and the lazy ./updater wiring — missing modules degrade to a thrown Error
+ * or a graceful {status:'dev'} fallback, never a crash.
  */
 
 const { app, ipcMain, dialog, shell } = require('electron');
@@ -44,20 +41,13 @@ function lazyLoader(relPath) {
   };
 }
 
-// ./quota and ./onboarding ship with the app; ./search (M2) and ./updater (M3)
-// may not exist yet — all four are lazy so this file loads regardless.
+// ./quota and ./onboarding ship with the app; ./usage-stats (B4) and
+// ./updater (M3) may not exist yet — all four are lazy so this file loads
+// regardless.
 const loadQuota = lazyLoader('./quota');
 const loadOnboarding = lazyLoader('./onboarding');
-const loadSearch = lazyLoader('./search');
+const loadUsageStats = lazyLoader('./usage-stats');
 const loadUpdater = lazyLoader('./updater');
-
-function requireClient(getClient) {
-  const client = getClient();
-  if (!client) {
-    throw new Error('kimi server is not running (backend not ready)');
-  }
-  return client;
-}
 
 function requireOnboarding() {
   const onboarding = loadOnboarding();
@@ -79,34 +69,26 @@ function wireUpdater(send) {
   }
 }
 
-function registerIpc({ getClient, getAppState, getToken, getWindow, broadcast, retryBackend }) {
+function registerIpc({ backend, getWindow, broadcast }) {
+  if (!backend) throw new Error('registerIpc requires the ./backend facade');
   const handle = (name, fn) => {
     ipcMain.handle(`kimi:${name}`, (_event, ...args) => fn(...args));
   };
 
-  // getState shape: backend state + onboarding flags (shared by bootstrapRetry).
-  const buildState = async () => {
-    const appState = getAppState();
-    const onboarding = loadOnboarding();
-    if (!onboarding) return appState;
+  // Synchronous capabilities query for the preload (runs before the page
+  // loads, so conditional window.kimi methods reflect the active engine).
+  ipcMain.on('kimi:capabilitiesSync', (event) => {
     try {
-      // Cheap variant: no `kimi --version` spawn on every getState call.
-      const ob = await onboarding.getOnboardingState({ withVersion: false });
-      return {
-        ...appState,
-        cliInstalled: ob.cliInstalled,
-        loggedIn: ob.loggedIn,
-        needsOnboarding: ob.needsOnboarding,
-      };
-    } catch (err) {
-      console.warn(`[kimi-desktop] onboarding state in getState failed: ${err.message}`);
-      return appState;
+      event.returnValue = backend.capabilities();
+    } catch {
+      event.returnValue = null;
     }
-  };
+  });
 
-  handle('getState', buildState);
+  // { ready, version, defaultModel, error?, engine, cliInstalled, loggedIn, needsOnboarding }
+  handle('getState', () => backend.getState());
 
-  // --- Onboarding (splash/first-run): CLI install + Kimi login -------------
+  // --- Onboarding (first-run gate): Kimi login (device flow) + CLI install ---
 
   handle('onboardingGetState', () => requireOnboarding().getOnboardingState());
 
@@ -119,41 +101,26 @@ function registerIpc({ getClient, getAppState, getToken, getWindow, broadcast, r
 
   handle('onboardingCancelLogin', () => requireOnboarding().cancelLogin());
 
-  // Re-run the backend launch once onboarding finished (first launch may have
-  // failed with no CLI installed). Returns the fresh state (getState shape).
+  // Re-init the active engine once onboarding finished (e.g. first login).
+  // Returns the fresh state (getState shape).
   handle('bootstrapRetry', async () => {
-    if (typeof retryBackend !== 'function') throw new Error('backend retry is unavailable');
-    await retryBackend();
-    return buildState();
+    await backend.retry();
+    return backend.getState();
   });
 
-  // --- Sessions / chat options ---------------------------------------------
+  // --- Engine ---------------------------------------------------------------
 
-  // GET /sessions items are snake_case wire objects ({updated_at,
-  // metadata:{cwd}, agent_config:{model}, ...}); the preload contract is
-  // camelCase: [{ id, title, cwd, updatedAt, busy, usage? }] (+ model).
-  handle('listSessions', async () => {
-    const items = await requireClient(getClient).listSessions();
-    return (Array.isArray(items) ? items : [])
-      .filter((s) => s && typeof s.id === 'string' && !s.archived)
-      .map((s) => ({
-        id: s.id,
-        title: typeof s.title === 'string' ? s.title : '',
-        cwd: s.metadata?.cwd ?? s.cwd ?? '',
-        updatedAt: s.updated_at ?? s.updatedAt ?? null,
-        busy: !!(s.busy ?? s.main_turn_active),
-        usage: s.usage ?? null,
-        model: s.agent_config?.model || null,
-      }));
+  // Switch engines ('direct' | 'cli'); persists. The renderer reloads after.
+  handle('setEngine', async (engineName) => {
+    await backend.setEngine(engineName);
+    return backend.getState();
   });
 
-  handle('createSession', async ({ cwd } = {}) => {
-    const client = requireClient(getClient);
-    const session = await client.createSession({ cwd });
-    // Stream the new session's events from the start (first turn included).
-    if (session && typeof session.id === 'string') client.subscribeSession(session.id);
-    return session;
-  });
+  // --- Sessions / chat (all routed through the backend facade) --------------
+
+  handle('listSessions', () => backend.listSessions());
+
+  handle('createSession', ({ cwd } = {}) => backend.createSession({ cwd }));
 
   handle('pickDirectory', async () => {
     const options = {
@@ -168,75 +135,56 @@ function registerIpc({ getClient, getAppState, getToken, getWindow, broadcast, r
     return result.filePaths[0];
   });
 
-  handle('getMessages', (sessionId) => {
-    const client = requireClient(getClient);
-    // Viewing a session subscribes it to the WS event stream (idempotent).
-    if (typeof sessionId === 'string' && sessionId) client.subscribeSession(sessionId);
-    return client.getMessages(sessionId);
-  });
+  handle('getMessages', (sessionId) => backend.getMessages(sessionId));
 
-  handle('getProfile', (sessionId) => requireClient(getClient).getProfile(sessionId));
+  handle('getProfile', (sessionId) => backend.getProfile(sessionId));
 
-  handle('sendPrompt', (sessionId, text) => requireClient(getClient).sendPrompt(sessionId, text));
+  handle('sendPrompt', (sessionId, text) => backend.sendPrompt(sessionId, text));
 
-  handle('steer', (sessionId, text) => requireClient(getClient).steer(sessionId, text));
+  handle('steer', (sessionId, text) => backend.steer(sessionId, text));
 
-  handle('abort', (sessionId) => requireClient(getClient).abort(sessionId));
+  handle('abort', (sessionId) => backend.abort(sessionId));
 
   handle('respondApproval', (sessionId, approvalId, decision) =>
-    requireClient(getClient).respondApproval(sessionId, approvalId, decision),
+    backend.respondApproval(sessionId, approvalId, decision),
   );
 
   handle('answerQuestion', (sessionId, tail, body) =>
-    requireClient(getClient).answerQuestion(sessionId, tail, body),
+    backend.answerQuestion(sessionId, tail, body),
   );
 
-  // GET /api/v1/models item (verified live):
-  //   {provider, model, display_name, max_context_size, capabilities}
-  // Normalized per contract: `alias` is the model id itself — it is both the
-  // value setSessionModel() sends and what getState().defaultModel contains,
-  // so renderer checkmarks/labels stay consistent. displayName is additive.
-  handle('listModels', async () => {
-    const items = await requireClient(getClient).listModels();
-    return (Array.isArray(items) ? items : [])
-      .filter((it) => it && typeof it.model === 'string' && it.model.length > 0)
-      .map((it) => ({
-        alias: it.model,
-        model: it.model,
-        displayName: typeof it.display_name === 'string' ? it.display_name : it.model,
-      }));
-  });
+  handle('listModels', () => backend.listModels());
 
-  handle('setSessionModel', (sessionId, model) =>
-    requireClient(getClient).setSessionModel(sessionId, model),
-  );
+  handle('setSessionModel', (sessionId, model) => backend.setSessionModel(sessionId, model));
 
-  // Swarm mode IS settable per session (verified live: POST profile
-  // {agent_config:{swarm_mode}} -> GET /status.swarm_mode), so it is exposed.
-  handle('setSessionSwarm', (sessionId, enabled) =>
-    requireClient(getClient).setSessionSwarm(sessionId, enabled),
-  );
+  handle('setSessionSwarm', (sessionId, enabled) => backend.setSessionSwarm(sessionId, enabled));
 
-  handle('listTasks', (sessionId) => requireClient(getClient).listTasks(sessionId));
+  handle('setSessionEffort', (sessionId, effort) => backend.setSessionEffort(sessionId, effort));
 
-  // --- Cross-agent lazy modules --------------------------------------------
+  handle('renameSession', (sessionId, title) => backend.renameSession(sessionId, title));
 
-  handle('searchAll', (query, limit) => {
-    const search = loadSearch();
-    if (!search || typeof search.searchAll !== 'function') {
-      throw new Error('search is unavailable (main/search.js not installed)');
+  handle('deleteSession', (sessionId) => backend.deleteSession(sessionId));
+
+  handle('listTasks', (sessionId) => backend.listTasks(sessionId));
+
+  // --- Cross-agent lazy modules ---------------------------------------------
+
+  handle('searchAll', (query, limit) => backend.searchAll(query, limit));
+
+  handle('getDailyUsage', () => {
+    const usage = loadUsageStats();
+    if (!usage || typeof usage.getDailyUsage !== 'function') {
+      throw new Error('usage stats are unavailable (main/usage-stats.js not installed)');
     }
-    const n = Number.isInteger(limit) && limit > 0 ? limit : 50;
-    return search.searchAll(String(query ?? ''), n);
+    return usage.getDailyUsage();
   });
 
   handle('getQuota', async () => {
     const quota = loadQuota();
     if (!quota || typeof quota.getQuota !== 'function') return null;
     try {
-      // Do NOT pass getToken(): that is the local daemon's WS bearer, not an
-      // OAuth access token — the quota API rejects it (401 → null). quota.js
-      // reads the OAuth credentials from ~/.kimi-code/credentials itself.
+      // Do NOT pass a server token: quota.js reads the OAuth credentials from
+      // ~/.kimi-code/credentials itself (works for both engines).
       return await quota.getQuota({});
     } catch (err) {
       console.warn(`[kimi-desktop] getQuota failed: ${err.message}`);
@@ -270,27 +218,4 @@ function registerIpc({ getClient, getAppState, getToken, getWindow, broadcast, r
   });
 }
 
-/** Forward KimiClient emissions to the renderer as kimi:event payloads. */
-function wireClientEvents(client, broadcast) {
-  const safe = (fn) => (...args) => {
-    try {
-      fn(...args);
-    } catch (err) {
-      console.error(`[kimi-desktop] event forwarding failed: ${err.message}`);
-    }
-  };
-  client.on(
-    'event',
-    safe(({ sessionId, event } = {}) => broadcast({ type: 'session', sessionId, event })),
-  );
-  client.on(
-    'usage',
-    safe(({ sessionId, usage } = {}) => broadcast({ type: 'usage', sessionId, usage })),
-  );
-  client.on(
-    'status',
-    safe(({ ready, error } = {}) => broadcast({ type: 'status', ready, ...(error ? { error } : {}) })),
-  );
-}
-
-module.exports = { registerIpc, wireClientEvents };
+module.exports = { registerIpc };

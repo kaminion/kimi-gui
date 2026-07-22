@@ -16,8 +16,9 @@
    .usage-card-grid (layout.css), .usage-card-caption, .usage-open-btn,
    .usage-row(-label/-value), .usage-detail, .usage-context, .usage-empty,
    .usage-section-title, #boot-error.
-   DARK-FIRST: base rules render the black-premium dark theme; rules scoped
-   under :root[data-theme="light"] restore the v1 Apple light look.
+   DARK-FIRST: base rules render the charcoal-premium dark theme (v3);
+   rules scoped under :root[data-theme="light"] restore the v1 Apple
+   light look.
    ========================================================================== */
 
 /* Shared mask defaults for CSS-drawn glyphs */
@@ -38,15 +39,18 @@
 }
 
 /* ==========================================================================
-   Messages (full-width transcript, no bubbles)
+   Messages (full-width transcript; user turns are raised bubbles, v3)
    ========================================================================== */
 
-/* User: accent-left-border block on secondary bg */
+/* User: raised bubble — surface-raised fill, hairline + 3px accent left
+   border, near-invisible card shadow (CONTRACT-V3) */
 .msg-user {
-  padding: 12px var(--space-3);
-  background: var(--bg-secondary);
+  padding: 10px 14px;
+  background: var(--surface-raised);
+  border: 0.5px solid var(--border);
   border-left: 3px solid var(--accent);
-  border-radius: var(--radius-m);
+  border-radius: var(--radius-xl); /* 12px */
+  box-shadow: var(--shadow-card);
   font-size: 14px;
   line-height: 1.5;
   white-space: pre-wrap;
@@ -155,7 +159,7 @@
   background: var(--text-dim);
   -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M4 2.5 8 6l-4 3.5' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M4 2.5 8 6l-4 3.5' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  transition: transform 0.15s ease;
+  transition: transform 0.15s var(--ease-out);
 }
 
 .msg-tool.expanded .tool-chevron {
@@ -213,8 +217,8 @@
    ========================================================================== */
 
 .md {
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: 15px;
+  line-height: 1.65;
   color: var(--text);
   overflow-wrap: break-word;
 }
@@ -227,7 +231,6 @@
   margin-bottom: 0;
 }
 
-.md p,
 .md ul,
 .md ol,
 .md blockquote,
@@ -236,6 +239,11 @@
 .md .code-block,
 .md hr {
   margin: var(--space-2) 0;
+}
+
+/* Paragraphs breathe more than other blocks (v3 readability: 12px) */
+.md p {
+  margin: 12px 0;
 }
 
 .md h1,
@@ -249,19 +257,23 @@
   line-height: 1.3;
 }
 
+/* Refined scale against the 15px body (v3): gentle steps, h4 ≥ body size */
 .md h1 {
-  font-size: 20px;
+  font-size: 21px;
 }
 
 .md h2 {
-  font-size: 17px;
+  font-size: 18px;
 }
 
 .md h3 {
+  font-size: 16px;
+}
+
+.md h4 {
   font-size: 15px;
 }
 
-.md h4,
 .md h5,
 .md h6 {
   font-size: 13px;
@@ -323,25 +335,31 @@
   border-radius: var(--radius-m);
 }
 
-/* Inline code */
+/* Inline code — v3: --code-bg lifts off --bg; the border is one step
+   stronger than --border so chips read clearly on raised surfaces too */
 .md code {
   font-family: var(--font-mono);
   font-size: 0.875em;
   padding: 1px 5px;
   background: var(--code-bg);
-  border: 0.5px solid var(--border);
+  border: 0.5px solid rgba(255, 255, 255, 0.12);
   border-radius: var(--radius-s);
+}
+
+/* Light theme keeps the v1 hairline */
+:root[data-theme="light"] .md code {
+  border-color: var(--border);
 }
 
 /* Bare fenced block (no header wrapper) */
 .md pre {
-  padding: 12px var(--space-3);
+  padding: 12px 14px;
   background: var(--code-bg);
   border: 0.5px solid var(--border);
   border-radius: var(--radius-m);
   overflow-x: auto;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.5;
 }
 
@@ -361,13 +379,20 @@
   border-radius: var(--radius-m);
 }
 
+/* Header bar: distinct darker layer (v3) so it separates clearly from the
+   code body; label left edge aligns with the 14px code padding */
 .code-block-header {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-1) var(--space-2) var(--space-1) 12px;
-  background: var(--hover-bg);
+  padding: 6px var(--space-2) 6px 14px;
+  background: var(--bg-secondary);
   border-bottom: 0.5px solid var(--border);
+}
+
+/* Light theme keeps the v1 translucent wash (bg-secondary == code-bg there) */
+:root[data-theme="light"] .code-block-header {
+  background: var(--hover-bg);
 }
 
 .code-lang {
@@ -397,13 +422,13 @@
 
 .md .code-block pre {
   margin: 0;
-  padding: 12px var(--space-3);
+  padding: 12px 14px;
   background: transparent;
   border: none;
   border-radius: 0;
 }
 
-/* Tables */
+/* Tables: horizontal hairlines only (v3) — no boxed grid */
 .md table {
   max-width: 100%;
   border-collapse: collapse;
@@ -413,7 +438,7 @@
 .md th,
 .md td {
   padding: var(--space-1) 12px;
-  border: 0.5px solid var(--border);
+  border-bottom: 0.5px solid var(--border);
   text-align: left;
   vertical-align: top;
 }
@@ -548,6 +573,7 @@
   border-radius: var(--radius-m);
   cursor: default;
   user-select: none;
+  transition: transform 0.16s var(--ease-out); /* press feedback */
 }
 
 .btn:hover {
@@ -556,6 +582,7 @@
 
 .btn:active {
   background: var(--active-bg);
+  transform: scale(0.97); /* emil: buttons must feel responsive */
 }
 
 .btn:disabled {
@@ -578,6 +605,7 @@
   border-radius: 999px;
   cursor: default;
   user-select: none;
+  transition: transform 0.16s var(--ease-out); /* press feedback */
 }
 
 .btn-primary:hover {
@@ -586,6 +614,7 @@
 
 .btn-primary:active {
   filter: brightness(0.92);
+  transform: scale(0.97);
 }
 
 .btn-primary:disabled {
@@ -829,6 +858,7 @@
   justify-content: center;
   background: var(--accent);
   border-radius: 50%;
+  transition: transform 0.16s var(--ease-out); /* press feedback */
 }
 
 #send-btn::before {
@@ -856,6 +886,7 @@
 
 #send-btn:active {
   filter: brightness(0.9);
+  transform: scale(0.93); /* circular icon button: slightly deeper press */
 }
 
 #send-btn:disabled {
@@ -877,7 +908,7 @@
   background: rgba(0, 0, 0, 0.55);
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
-  animation: modal-fade 0.15s ease-out;
+  animation: modal-fade 0.15s var(--ease-out);
 }
 
 :root[data-theme="light"] .modal-backdrop {
@@ -900,7 +931,9 @@
   border: 0.5px solid var(--border);
   border-radius: 14px;
   box-shadow: var(--shadow-modal);
-  animation: modal-pop 0.18s ease-out;
+  /* Enter: ease-out settle from 1.03 — no bounce, transform+opacity only,
+     centered origin (modals are exempt from trigger-origin) */
+  animation: modal-pop 0.18s var(--ease-out);
 }
 
 @keyframes modal-pop {
@@ -1082,7 +1115,10 @@
   height: 100%;
   background: var(--accent);
   border-radius: inherit;
-  transition: width 0.3s ease;
+  /* Documented exception to the transform/opacity-only rule: the fill width
+     is set inline by usage.js, so a transform would not track it. It fires
+     once per data load on a handful of 4px tracks — cheap. 250ms, ease. */
+  transition: width 0.25s ease;
 }
 
 .progress-bar.warn > :first-child,
@@ -1270,4 +1306,129 @@
 
 #boot-retry-btn:active {
   filter: brightness(0.92);
+}
+
+/* ==========================================================================
+   usage v3 — daily usage section (B4; additive append, owned classes
+   .daily-usage .daily-today .daily-chart .daily-col .daily-bars .daily-bar
+   .daily-day .daily-legend .daily-swatch — keep this section at END of file)
+   ========================================================================== */
+
+/* Container div#daily-usage injected by usage.js above #quota-cards */
+.daily-usage {
+  margin-bottom: var(--space-4);
+}
+
+/* Today totals: input / output / (optional) cost, in a loose row */
+.daily-today {
+  display: flex;
+  gap: var(--space-5);
+  margin-bottom: var(--space-3);
+}
+
+.daily-today-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.daily-today-value {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.daily-today-label {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* 7 columns, fixed height; each column holds a bar pair + day label */
+.daily-chart {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: var(--space-2);
+  align-items: end;
+  height: 88px;
+  padding: var(--space-2) var(--space-2) 0;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-m);
+}
+
+.daily-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  min-width: 0;
+}
+
+/* Bar area fills the column above the label; hairline acts as the x-axis */
+.daily-bars {
+  display: flex;
+  flex: 1;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  border-bottom: 0.5px solid var(--border);
+}
+
+.daily-bar {
+  width: 8px;
+  min-height: 0;
+  border-radius: 2px 2px 0 0;
+}
+
+.daily-bar-in {
+  background: var(--text-dim);
+  opacity: 0.55;
+}
+
+.daily-bar-out {
+  background: var(--accent);
+}
+
+.daily-day {
+  padding: 3px 0 var(--space-1);
+  font-size: 10px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.daily-day.today {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.daily-legend {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-1);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.daily-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.daily-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.daily-swatch-in {
+  background: var(--text-dim);
+  opacity: 0.55;
+}
+
+.daily-swatch-out {
+  background: var(--accent);
 }

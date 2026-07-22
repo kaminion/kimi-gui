@@ -45,6 +45,36 @@
       updateAbortButton();
     },
 
+    /**
+     * v3 (R1): re-sync after a renderer-initiated session mutation (rename /
+     * delete from the sidebar). Selection intent is preserved: when the
+     * active session still exists it stays selected and only the chrome
+     * refreshes (this is how a rename of the active session reaches
+     * #chat-title); when it vanished, switch to the most recent remaining
+     * session, or to draft mode when none are left.
+     */
+    async refreshSessionsAfterMutation() {
+      const prevActive = App.state.activeId;
+      try {
+        App.state.sessions = await window.kimi.listSessions();
+      } catch (err) {
+        console.error('listSessions failed', err);
+        return;
+      }
+      window.Sidebar?.render?.(App.state);
+      if (!prevActive || App.state.sessions.some((s) => s.id === prevActive)) {
+        updateChatHeader();
+        updateAbortButton();
+        return;
+      }
+      // The active session was deleted: fall back to the next-most-recent.
+      const sorted = [...App.state.sessions].sort(
+        (a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0)
+      );
+      if (sorted.length) await App.selectSession(sorted[0].id);
+      else App.startNewChat();
+    },
+
     /** Select a session: highlight it, load its transcript and context meter. */
     async selectSession(id) {
       App.state.activeId = id;
@@ -150,6 +180,10 @@
   };
 
   window.App = App;
+
+  /* v3 (R1): additive hook so the sidebar can refresh #chat-title after a
+   * rename when no backend rename IPC is available (local-only fallback). */
+  App.updateChatHeader = updateChatHeader;
 
   // Re-render language-dependent chrome on language change (sidebar, header,
   // status dot, update dot). Static markup is handled by I18N.applyToDom.
@@ -268,11 +302,32 @@
     }
     const pct = Math.round((used / limit) * 100);
     el.textContent = `${pct}%`;
+    // v3 tooltip pass (R2): first line explains the metric, second the numbers.
     el.title =
+      T('chat.context_meter_title', '컨텍스트 사용량 — 모델에 전달 중인 대화 토큰 비율') +
+      '\n' +
       T('chat.context_title_pre', '컨텍스트 ') +
       `${intFmt.format(used)} / ${intFmt.format(limit)}` +
       T('common.tokens', ' 토큰');
     el.style.color = pct >= 80 ? 'var(--warn)' : '';
+  }
+
+  /**
+   * v3 tooltip pass (R2 additive): informative titles for header chrome whose
+   * markup lives outside the composer block. data-i18n-title is re-pointed at
+   * the new key so I18N.applyToDom keeps translating it after the harvest.
+   */
+  function applyHeaderTooltips() {
+    const panelBtn = $('#panel-toggle-btn');
+    if (panelBtn) {
+      panelBtn.setAttribute('data-i18n-title', 'panel.toggle_title');
+      panelBtn.title = T('panel.toggle_title', '작업 패널 — 실행 상태와 도구 활동 보기');
+    }
+    const abortBtn = $('#abort-btn');
+    if (abortBtn) {
+      abortBtn.setAttribute('data-i18n-title', 'chat.abort_title');
+      abortBtn.title = T('chat.abort_title', '중단');
+    }
   }
 
   function setServerStatus(ready, error) {
@@ -358,6 +413,7 @@
 
   function wireChrome() {
     $('#new-chat-btn').addEventListener('click', () => App.startNewChat());
+    applyHeaderTooltips();
     $('#usage-nav-btn').addEventListener('click', () => {
       App.showView(App.state.view === 'usage' ? 'chat' : 'usage');
     });
