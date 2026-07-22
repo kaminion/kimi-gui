@@ -256,7 +256,7 @@
     if (typeof window.kimi?.setEngine !== 'function') return;
     const ok = await confirmDialog({
       title: T('settings.engine.switch_title', '엔진 전환'),
-      body: T('settings.engine.switch_confirm', '전환하면 앱이 다시 시작됩니다'),
+      body: T('settings.engine.switch_confirm', '전환하면 앱이 다시 시작됩니다.'),
       confirmLabel: T('settings.engine.switch_action', '전환 및 재시작'),
     });
     if (!ok) return;
@@ -301,7 +301,7 @@
     cards.appendChild(engineCard(
       'cli',
       'settings.engine.cli.title', 'Kimi Code CLI',
-      'settings.engine.cli.desc', '에이전트 모드 — Swarm 등 고급 기능',
+      'settings.engine.cli.desc', '에이전트 모드 — 스웜 등 고급 기능',
       engine === 'cli'
     ));
     content.appendChild(cards);

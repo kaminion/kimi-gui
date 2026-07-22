@@ -743,7 +743,7 @@ async function sendPrompt(sessionId, text) {
 async function steer(sessionId, text) {
   if (currentEngine === 'cli') return requireCli().steer(sessionId, text);
   if (activeTurns.has(sessionId)) {
-    const message = '실행 중에는 스티어할 수 없습니다. 응답이 끝난 후 볼 수 있습니다.';
+    const message = '실행 중에는 스티어할 수 없습니다. 응답이 끝난 후 다시 시도해 주세요.';
     emitSession(sessionId, { type: 'error', message });
     throw new Error(message);
   }

@@ -211,7 +211,7 @@
     const on = swarmEnabled(sid);
     swarmBtn.classList.toggle('on', on);
     swarmBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
-    swarmBtn.title = T('options.swarm.title', 'Swarm — 병렬 서브에이전트로 탐색/작업');
+    swarmBtn.title = T('options.swarm.title', '스웜 — 병렬 서브에이전트로 탐색/작업');
   }
 
   async function toggleSwarm() {
