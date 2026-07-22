@@ -664,6 +664,13 @@
     setBusy(true); // input locks until the server reports idle again
     Promise.resolve()
       .then(() => app.sendPrompt(text))
+      .then((ok) => {
+        // App.sendPrompt swallows its errors and reports failure as false.
+        if (ok === false) {
+          appendSystemNote(T('chat.send_failed', '메시지 전송에 실패했어요. 다시 시도해 주세요.'));
+          setBusy(false);
+        }
+      })
       .catch(() => {
         appendSystemNote(T('chat.send_failed', '메시지 전송에 실패했어요. 다시 시도해 주세요.'));
         setBusy(false);

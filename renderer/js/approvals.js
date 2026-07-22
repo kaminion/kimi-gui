@@ -177,10 +177,10 @@
     body.append(hint, toolLine, args);
 
     const actions = el('div', 'modal-actions');
-    const rejectBtn = el('button', 'btn btn-secondary', T('approval.reject', '거절'));
+    const rejectBtn = el('button', 'btn btn-ghost', T('approval.reject', '거절'));
     rejectBtn.type = 'button';
     rejectBtn.addEventListener('click', () => respondApproval(entry, 'rejected'));
-    const approveBtn = el('button', 'btn btn-accent', T('approval.approve', '승인'));
+    const approveBtn = el('button', 'btn btn-primary', T('approval.approve', '승인'));
     approveBtn.type = 'button';
     approveBtn.addEventListener('click', () => respondApproval(entry, 'approved'));
     actions.append(rejectBtn, approveBtn);
@@ -317,10 +317,10 @@
     });
 
     const actions = el('div', 'modal-actions');
-    const skipBtn = el('button', 'btn btn-secondary', T('approval.skip', '건너뛰기'));
+    const skipBtn = el('button', 'btn btn-ghost', T('approval.skip', '건너뛰기'));
     skipBtn.type = 'button';
     skipBtn.addEventListener('click', () => dismissQuestion(entry));
-    const okBtn = el('button', 'btn btn-accent question-submit', T('approval.confirm', '확인'));
+    const okBtn = el('button', 'btn btn-primary question-submit', T('approval.confirm', '확인'));
     okBtn.type = 'button';
     okBtn.disabled = true;
     okBtn.addEventListener('click', () => submitQuestion(entry, modal));

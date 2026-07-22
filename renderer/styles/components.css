@@ -980,6 +980,32 @@
   margin-top: var(--space-3);
 }
 
+/* Approval modal specifics (approvals.js): tool line keeps the mono tool name
+   and the server-supplied action summary from jamming together. */
+.approval-hint {
+  margin: 0 0 var(--space-1);
+}
+
+.approval-tool-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: var(--space-1) 0;
+}
+
+.approval-tool-name {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+}
+
+.approval-action {
+  min-width: 0;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+
 /* ==========================================================================
    Usage cards
    ========================================================================== */
@@ -1183,6 +1209,13 @@
 
 #context-meter {
   font-variant-numeric: tabular-nums;
+}
+
+/* An empty metadata pill renders as a blank outline (v2: #model-label defers
+   to the #model-select pill; #context-meter is empty until usage is known). */
+#model-label:empty,
+#context-meter:empty {
+  display: none;
 }
 
 /* ==========================================================================

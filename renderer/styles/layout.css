@@ -122,6 +122,22 @@ body {
   transition: transform 0.15s ease;
 }
 
+/* sidebar.js renders .session-group-name + .session-group-count inside the
+   label: project name truncates, the count parks dimmed at the trailing edge. */
+.session-group-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-group-count {
+  margin-left: auto;
+  padding-left: var(--space-2);
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
 .session-group.collapsed .session-group-label > svg,
 .session-group.collapsed .session-group-chevron {
   transform: none;

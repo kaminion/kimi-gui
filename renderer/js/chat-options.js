@@ -35,11 +35,14 @@
     return st?.activeSessionId ?? st?.activeId ?? null;
   }
 
-  /** Model alias shown on the pill: per-session override, else server default. */
+  /** Model alias shown on the pill: per-session override, else the session's
+   * server-side model (listSessions), else the server default. */
   function currentModel(sessionId) {
     if (sessionId) {
       const stored = lsGet(LS_MODEL + sessionId);
       if (stored) return stored;
+      const sessionModel = window.App?.state?.sessions?.find?.((s) => s && s.id === sessionId)?.model;
+      if (sessionModel) return sessionModel;
     }
     return window.App?.state?.defaultModel ?? null;
   }

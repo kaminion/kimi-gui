@@ -129,9 +129,31 @@ function registerIpc({ getClient, getAppState, getToken, getWindow, broadcast, r
 
   // --- Sessions / chat options ---------------------------------------------
 
-  handle('listSessions', () => requireClient(getClient).listSessions());
+  // GET /sessions items are snake_case wire objects ({updated_at,
+  // metadata:{cwd}, agent_config:{model}, ...}); the preload contract is
+  // camelCase: [{ id, title, cwd, updatedAt, busy, usage? }] (+ model).
+  handle('listSessions', async () => {
+    const items = await requireClient(getClient).listSessions();
+    return (Array.isArray(items) ? items : [])
+      .filter((s) => s && typeof s.id === 'string' && !s.archived)
+      .map((s) => ({
+        id: s.id,
+        title: typeof s.title === 'string' ? s.title : '',
+        cwd: s.metadata?.cwd ?? s.cwd ?? '',
+        updatedAt: s.updated_at ?? s.updatedAt ?? null,
+        busy: !!(s.busy ?? s.main_turn_active),
+        usage: s.usage ?? null,
+        model: s.agent_config?.model || null,
+      }));
+  });
 
-  handle('createSession', ({ cwd } = {}) => requireClient(getClient).createSession({ cwd }));
+  handle('createSession', async ({ cwd } = {}) => {
+    const client = requireClient(getClient);
+    const session = await client.createSession({ cwd });
+    // Stream the new session's events from the start (first turn included).
+    if (session && typeof session.id === 'string') client.subscribeSession(session.id);
+    return session;
+  });
 
   handle('pickDirectory', async () => {
     const options = {
@@ -146,7 +168,12 @@ function registerIpc({ getClient, getAppState, getToken, getWindow, broadcast, r
     return result.filePaths[0];
   });
 
-  handle('getMessages', (sessionId) => requireClient(getClient).getMessages(sessionId));
+  handle('getMessages', (sessionId) => {
+    const client = requireClient(getClient);
+    // Viewing a session subscribes it to the WS event stream (idempotent).
+    if (typeof sessionId === 'string' && sessionId) client.subscribeSession(sessionId);
+    return client.getMessages(sessionId);
+  });
 
   handle('getProfile', (sessionId) => requireClient(getClient).getProfile(sessionId));
 
@@ -207,7 +234,10 @@ function registerIpc({ getClient, getAppState, getToken, getWindow, broadcast, r
     const quota = loadQuota();
     if (!quota || typeof quota.getQuota !== 'function') return null;
     try {
-      return await quota.getQuota({ token: getToken() ?? undefined });
+      // Do NOT pass getToken(): that is the local daemon's WS bearer, not an
+      // OAuth access token — the quota API rejects it (401 → null). quota.js
+      // reads the OAuth credentials from ~/.kimi-code/credentials itself.
+      return await quota.getQuota({});
     } catch (err) {
       console.warn(`[kimi-desktop] getQuota failed: ${err.message}`);
       return null; // UI falls back to per-session usage only

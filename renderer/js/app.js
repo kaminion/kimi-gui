@@ -39,7 +39,7 @@
         App.state.activeId = null;
         updateChatHeader();
         updateContextMeter(null);
-        window.Chat?.renderMessages?.([]);
+        window.Chat?.renderMessages?.([], null);
       }
       window.Sidebar?.render?.(App.state);
       updateAbortButton();
@@ -56,7 +56,8 @@
       try {
         const messages = await window.kimi.getMessages(id);
         if (App.state.activeId !== id) return; // user switched meanwhile
-        window.Chat?.renderMessages?.(messages);
+        // Pass the id: chat.js filters WS events by its activeSessionId.
+        window.Chat?.renderMessages?.(messages, id);
       } catch (err) {
         console.error('getMessages failed', err);
       }
@@ -85,7 +86,7 @@
       updateContextMeter(null);
       refreshChatOptions(null);
       notifyPanelSession(null);
-      window.Chat?.renderMessages?.([]);
+      window.Chat?.renderMessages?.([], null);
       $('#composer')?.focus();
     },
 
@@ -117,7 +118,9 @@
           updateChatHeader();
           refreshChatOptions(session.id);
           notifyPanelSession(session.id);
-          window.Chat?.renderMessages?.([]);
+          // Do NOT renderMessages([]) here: that would wipe the optimistic
+          // user echo. Just point chat.js at the new session for WS filtering.
+          window.Chat?.setActiveSession?.(session.id);
           id = session.id;
         }
         await window.kimi.sendPrompt(id, text);
@@ -241,7 +244,9 @@
   function updateChatHeader() {
     const session = App.state.sessions.find((s) => s.id === App.state.activeId);
     $('#chat-title').textContent = session?.title || T('chat.new_chat', '새 대화');
-    $('#model-label').textContent = App.state.defaultModel || '';
+    // The v2 model pill (ChatOptions) owns model display; #model-label is the
+    // v1 fallback, kept empty while the pill exists to avoid showing it twice.
+    $('#model-label').textContent = window.ChatOptions ? '' : App.state.defaultModel || '';
     updateAbortButton();
   }
 
@@ -333,7 +338,8 @@
     if (!ev) return;
     const type = String(ev.type || '');
     // Chat transcript and approval dialogs handle their own event kinds.
-    window.Chat?.applyEvent?.(App.state.activeId, ev);
+    // Pass the event's own sessionId — chat.js drops background sessions.
+    window.Chat?.applyEvent?.(sessionId, ev);
     window.Approvals?.maybeHandle?.(ev);
     // The agent-work panel (R3) sees every session event.
     safeCall(() =>
@@ -350,45 +356,13 @@
 
   /* ---- static chrome wiring ---- */
 
-  function wireComposer() {
-    const composer = $('#composer');
-    const sendBtn = $('#send-btn');
-    const autoresize = () => {
-      composer.style.height = 'auto';
-      composer.style.height = `${Math.min(composer.scrollHeight, 200)}px`;
-    };
-    composer.addEventListener('input', autoresize);
-    composer.addEventListener('keydown', (e) => {
-      // isComposing guards Korean IME: Enter must not send mid-composition.
-      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
-        e.preventDefault();
-        void handleSend();
-      }
-    });
-    sendBtn.addEventListener('click', () => void handleSend());
-
-    async function handleSend() {
-      const text = composer.value.trim();
-      if (!text) return;
-      sendBtn.disabled = true;
-      try {
-        if (await App.sendPrompt(text)) {
-          composer.value = '';
-          autoresize();
-          composer.focus();
-        }
-      } finally {
-        sendBtn.disabled = false;
-      }
-    }
-  }
-
   function wireChrome() {
     $('#new-chat-btn').addEventListener('click', () => App.startNewChat());
     $('#usage-nav-btn').addEventListener('click', () => {
       App.showView(App.state.view === 'usage' ? 'chat' : 'usage');
     });
-    $('#abort-btn').addEventListener('click', () => App.abort());
+    // NOTE: #composer / #send-btn / #abort-btn are owned by chat.js (optimistic
+    // echo, busy lock, autoresize). Binding them here too would double-send.
     $('#boot-retry-btn').addEventListener('click', () => location.reload());
     // v2 chrome. Search palette (⌘F / #search-open-btn) is wired by R2's
     // search.js; model/swarm pill clicks are wired by R4's ChatOptions.init().
@@ -401,7 +375,6 @@
     $('#panel-close-btn')?.addEventListener('click', () => {
       safeCall(() => window.Panel?.toggle?.());
     });
-    wireComposer();
     window.addEventListener('keydown', (e) => {
       if (!(e.metaKey || e.ctrlKey)) return;
       if (e.key.toLowerCase() === 'n') {

@@ -57,8 +57,10 @@
     if (window.App?.state) render(window.App.state);
   }
 
-  function chevronSvg(collapsed) {
-    const path = collapsed ? 'M5 3l4 3.5L5 10' : 'M3 5l3.5 4L10 5';
+  function chevronSvg() {
+    // Always the right-pointing glyph: layout.css rotates it 90° (down) while
+    // the group is expanded and snaps it back on .collapsed.
+    const path = 'M5 3l4 3.5L5 10';
     return `<svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true">` +
       `<path d="${path}" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>` +
       `</svg>`;
@@ -97,10 +99,12 @@
   /**
    * Group header: chevron + project name + session count.
    * Click / Enter / Space toggles the group; state persists across launches.
+   * Class names match layout.css (.session-group-label, rotation-based
+   * chevron: right-pointing base glyph, CSS rotates it 90° when expanded).
    */
   function renderGroupHeader(group, isCollapsed) {
     const header = document.createElement('div');
-    header.className = 'session-group-header';
+    header.className = 'session-group-label';
     header.setAttribute('role', 'button');
     header.tabIndex = 0;
     header.setAttribute('aria-expanded', String(!isCollapsed));

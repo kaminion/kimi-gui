@@ -143,7 +143,28 @@ class KimiClient extends EventEmitter {
 
   listSessions() { return this.request('GET', '/sessions').then((d) => d?.items ?? []); }
   getSession(id) { return this.request('GET', `/sessions/${encodeURIComponent(id)}`); }
-  getProfile(id) { return this.request('GET', `/sessions/${encodeURIComponent(id)}/profile`); }
+
+  /**
+   * Session profile. 0.28.1 keeps profile.usage all-zero even after completed
+   * turns (docs/protocol.md), while GET /status has the accurate live context
+   * numbers — merge those into usage so callers (context meter, usage view)
+   * see real data.
+   */
+  async getProfile(id) {
+    const profile = await this.request('GET', `/sessions/${encodeURIComponent(id)}/profile`);
+    try {
+      const status = await this.getSessionStatus(id);
+      if (status && typeof status === 'object') {
+        profile.usage = {
+          ...(profile?.usage ?? {}),
+          context_tokens: status.context_tokens ?? profile?.usage?.context_tokens ?? 0,
+          context_limit: status.max_context_tokens ?? profile?.usage?.context_limit ?? 0,
+        };
+      }
+    } catch { /* status enrichment is best-effort */ }
+    return profile;
+  }
+
   getSessionStatus(id) { return this.request('GET', `/sessions/${encodeURIComponent(id)}/status`); }
 
   /**

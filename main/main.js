@@ -136,6 +136,20 @@ async function doLaunchBackend() {
   wireClientEvents(client, broadcast);
   console.log(`[kimi-desktop] backend ready at ${baseUrl}`);
 
+  // Open the event WebSocket and subscribe to all known sessions so live
+  // traffic (streaming deltas, busy flips, approvals, usage) flows even for
+  // sessions the renderer has not selected yet. Selection/creation paths
+  // (ipc.js getMessages/createSession) subscribe idempotently on top of this.
+  client.connect();
+  client
+    .listSessions()
+    .then((items) => {
+      for (const s of Array.isArray(items) ? items : []) {
+        if (s && typeof s.id === 'string') client.subscribeSession(s.id);
+      }
+    })
+    .catch(() => { /* best-effort; selection paths subscribe lazily */ });
+
   // Best-effort metadata for getState(); failures must not break the launch.
   try {
     const meta = await client.meta();
