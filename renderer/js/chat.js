@@ -23,6 +23,16 @@
  * Chat.scrollToMessage(id) scrolls a row into view with a 1.2s highlight
  * flash (.search-highlight, keyframes in styles/search.css) — used by the
  * search palette (js/search.js) via App.openSessionAtMessage.
+ *
+ * v5 (R-UX):
+ * - While the active session is busy, #send-btn morphs into a STOP button
+ *   (.stop-mode, CSS square glyph); clicking it calls App.abort(). The old
+ *   header #abort-btn is gone. Chat.setBusy drives the morph.
+ * - Foreign-engine sessions (engine mismatch — e.g. a direct session opened
+ *   under the cli engine) are read-only: Chat.setReadOnly(true) disables the
+ *   composer + send button and swaps the placeholder/title for the
+ *   chat.foreign_readonly notice. The backend also rejects such sends with an
+ *   {type:'error', message} event, rendered here as a chat system note.
  */
 (function () {
   'use strict';
@@ -61,14 +71,13 @@
     'question.requested', 'question.answered', 'question.dismissed',
     'config.changed', 'model_catalog.changed',
     'workspace.created', 'workspace.updated', 'workspace.deleted',
-    'error', 'warning',
+    'warning',
   ]);
 
   // ---- module state --------------------------------------------------------
   let transcriptEl = null;
   let composerEl = null;
   let sendBtn = null;
-  let abortBtn = null;
   let initialized = false;
 
   let activeSessionId = null;
@@ -77,6 +86,7 @@
   const liveStreams = new Map();        // turnId -> { row, thinking, text } for id-less deltas
   let optimisticUser = null;            // { text, el } echoed locally until server confirms
   let busy = false;
+  let readOnly = false;                 // foreign-engine session: composer locked, notice shown
   let pinned = true;
   let reloadTimer = null;
   let highlightTimer = null;        // pending removal of a .search-highlight flash
@@ -598,6 +608,14 @@
         setBusy(false);
         scheduleReload();
         break;
+      case 'error': {
+        // Backend rejection surfaced mid-chat (e.g. a send attempted on a
+        // foreign-engine session, or a failed direct turn): render as a
+        // system note. Wire shape: {type:'error', message} (backend.js).
+        const note = data.message ?? data.error ?? data.detail;
+        if (typeof note === 'string' && note.trim()) appendSystemNote(note);
+        break;
+      }
       default:
         if (!IGNORE_TYPES.has(type)) scheduleReload(); // unknown shape: full resync
         break;
@@ -609,23 +627,54 @@
     const wasBusy = busy;
     busy = !!b;
     if (!initialized) return;
-    composerEl.disabled = busy;
-    abortBtn.hidden = !busy;
-    updateSendBtn();
-    if (!busy) {
+    refreshComposerUi();
+    if (wasBusy && !busy) {
       // Stream ended: settle any leftover running tool rows.
       streamNodes.clear();
       for (const m of messages) {
         if (m.role === 'assistant' || m.role === 'tool') rerenderMessageNode(m);
       }
       // Safety resync when a busy period with live traffic ends.
-      if (wasBusy && liveStreams.size > 0) scheduleReload();
+      if (liveStreams.size > 0) scheduleReload();
     }
+  }
+
+  // ---- read-only (foreign-engine session) --------------------------------------
+  // v5 (R-UX): app.js flags sessions the active engine cannot continue (e.g.
+  // a direct session listed under the cli engine). The transcript still
+  // renders; the composer + send button lock and show the notice instead.
+  function setReadOnly(flag) {
+    const next = !!flag;
+    if (next === readOnly) return;
+    readOnly = next;
+    if (initialized) refreshComposerUi();
+  }
+
+  /** Composer + send-button chrome for the current busy/readOnly state. */
+  function refreshComposerUi() {
+    if (!initialized) return;
+    composerEl.disabled = busy || readOnly;
+    if (readOnly) {
+      const notice = T('chat.foreign_readonly', '내장 엔진 세션은 열어보기만 가능합니다 · 엔진 전환 시 이어쓸 수 있습니다');
+      composerEl.setAttribute('placeholder', notice);
+    } else {
+      composerEl.setAttribute('placeholder', T('chat.composer_placeholder', '메시지를 입력하세요…'));
+    }
+    updateSendBtn();
   }
 
   function updateSendBtn() {
     if (!sendBtn) return;
-    sendBtn.disabled = busy || !composerEl.value.trim();
+    // Busy (and not read-only): the send button becomes a stop button —
+    // always clickable; click routes to App.abort() (see wireComposer).
+    const stop = busy && !readOnly;
+    sendBtn.classList.toggle('stop-mode', stop);
+    sendBtn.disabled = readOnly || (!stop && !composerEl.value.trim());
+    if (stop) {
+      sendBtn.setAttribute('aria-label', T('chat.abort_title', '중단'));
+    } else {
+      sendBtn.setAttribute('aria-label', T('chat.send_aria', '전송'));
+    }
   }
 
   // ---- composer ----------------------------------------------------------------
@@ -652,7 +701,7 @@
   }
 
   function doSend() {
-    if (busy) return;
+    if (busy || readOnly) return;
     const text = composerEl.value.trim();
     if (!text) return;
     const app = window.App;
@@ -678,7 +727,6 @@
   }
 
   function wireComposer() {
-    composerEl.setAttribute('placeholder', T('chat.composer_placeholder', '메시지를 입력하세요…'));
     composerEl.addEventListener('keydown', (e) => {
       // Enter sends; Shift+Enter inserts a newline. isComposing guards IME (한글) input.
       if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
@@ -687,9 +735,13 @@
       }
     });
     composerEl.addEventListener('input', () => { autoGrow(); updateSendBtn(); });
-    sendBtn.addEventListener('click', doSend);
-    abortBtn.addEventListener('click', () => {
-      if (window.App && typeof window.App.abort === 'function') window.App.abort();
+    sendBtn.addEventListener('click', () => {
+      // Stop-mode: while the session is busy the button aborts instead of sending.
+      if (busy && !readOnly) {
+        if (window.App && typeof window.App.abort === 'function') window.App.abort();
+        return;
+      }
+      doSend();
     });
   }
 
@@ -699,14 +751,13 @@
     transcriptEl = document.getElementById('transcript');
     composerEl = document.getElementById('composer');
     sendBtn = document.getElementById('send-btn');
-    abortBtn = document.getElementById('abort-btn');
-    if (!transcriptEl || !composerEl || !sendBtn || !abortBtn) return; // DOM not ready
+    if (!transcriptEl || !composerEl || !sendBtn) return; // DOM not ready
     initialized = true;
     wireComposer();
     transcriptEl.addEventListener('scroll', () => { pinned = isPinned(); });
     pinned = true;
     renderEmptyState();
-    updateSendBtn();
+    refreshComposerUi();
   }
 
   function renderMessages(list, sessionId) {
@@ -743,6 +794,7 @@
     streamNodes.clear();
     liveStreams.clear();
     optimisticUser = null;
+    readOnly = false;
     if (reloadTimer) { clearTimeout(reloadTimer); reloadTimer = null; }
     if (highlightTimer) { clearTimeout(highlightTimer); highlightTimer = null; }
     if (initialized) {
@@ -750,6 +802,7 @@
       composerEl.value = '';
       autoGrow();
       setBusy(false);
+      refreshComposerUi();
       renderEmptyState();
       pinned = true;
     }
@@ -760,6 +813,7 @@
     renderMessages,
     applyEvent,
     setBusy,
+    setReadOnly,
     setActiveSession,
     reset,
     scrollToBottom,
@@ -773,11 +827,12 @@
     init();
   }
 
-  // Language change: refresh the composer placeholder and the empty-state
-  // copy. The transcript itself is not re-rendered (history stays as-is).
+  // Language change: refresh the composer placeholder/notice, the send/stop
+  // tooltip and the empty-state copy. The transcript itself is not
+  // re-rendered (history stays as-is).
   window.I18N?.onChange?.(() => {
     if (!initialized) return;
-    composerEl.setAttribute('placeholder', T('chat.composer_placeholder', '메시지를 입력하세요…'));
+    refreshComposerUi();
     const empty = transcriptEl.querySelector('.transcript-empty-text');
     if (empty) empty.textContent = T('chat.empty_state', '무엇을 도와드릴까요?');
   });

@@ -169,7 +169,6 @@
     if (!modelPill) return;
     const model = currentModel(sessionId);
     modelPill.textContent = model || T('options.model.none', '모델');
-    modelPill.title = T('options.model.pick_title', '모델 선택 — 현재 대화에 적용');
   }
 
   async function fillModelDropdown(box) {
@@ -218,17 +217,15 @@
   function updateSwarm(sid) {
     if (!swarmBtn || swarmBtn.hidden) return;
     if (!swarmBtn.textContent.trim()) swarmBtn.textContent = T('options.swarm.label', '스웜');
-    // v4: engine without swarm (direct) — inert pill, explanatory title.
+    // v4: engine without swarm (direct) — inert pill.
     if (typeof window.kimi?.setSessionSwarm !== 'function') {
       swarmBtn.classList.remove('on');
       swarmBtn.setAttribute('aria-pressed', 'false');
-      swarmBtn.title = T('options.swarm.unavailable', '스웜은 CLI 에이전트 모드에서 사용할 수 있습니다');
       return;
     }
     const on = swarmEnabled(sid);
     swarmBtn.classList.toggle('on', on);
     swarmBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
-    swarmBtn.title = T('options.swarm.title', '스웜 — 병렬 서브에이전트로 탐색/작업');
   }
 
   async function toggleSwarm() {
@@ -260,10 +257,6 @@
   function updateEffortPill(sid) {
     if (!effortPill || effortPill.hidden) return;
     effortPill.textContent = effortLabel(currentEffort(sid));
-    effortPill.title = T(
-      'options.effort.title',
-      '사고 수준 — 높을수록 깊이 추론하지만 느려질 수 있습니다'
-    );
   }
 
   function fillEffortDropdown(box) {

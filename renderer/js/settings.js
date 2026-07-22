@@ -607,7 +607,6 @@
     void loadOnboardingState().then(() => {
       if (!isOpen() || !cliPathVal.isConnected) return;
       cliPathVal.textContent = onboardingState?.cliPath || T('settings.info.not_found', '찾을 수 없음');
-      cliPathVal.title = onboardingState?.cliPath || '';
       cliVerVal.textContent = onboardingState?.cliVersion || '—';
     });
     if (!window.App?.state?.version && typeof window.kimi?.getState === 'function') {

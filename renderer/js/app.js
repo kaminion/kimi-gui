@@ -4,7 +4,6 @@
 (function () {
   const $ = (sel) => document.querySelector(sel);
   const T = (k, f) => (window.I18N?.t ? window.I18N.t(k, f) : f);
-  const intFmt = new Intl.NumberFormat('ko-KR');
   const LAST_CWD_KEY = 'kimi.lastCwd';
   const DEFAULT_MODEL_KEY = 'kimi.defaultModel';
   const DEFAULT_SWARM_KEY = 'kimi.defaultSwarm'; // v4 (R2): settings 스웜 기본값
@@ -13,14 +12,14 @@
   let unsubscribeEvents = null;   // guard against double-subscribe on re-entry
   let chatOptionsInited = false;  // ChatOptions.init() runs exactly once
   let updateReady = false;        // a downloaded update is waiting to install
-  let updateVersion = null;       // version of the downloaded update (for the title)
+  let updateVersion = null;       // version of the downloaded update
 
   const App = {
     state: {
       ready: false,        // backend answered getState with ready:true
       version: null,
       defaultModel: null,
-      sessions: [],        // [{ id, title, cwd, updatedAt, busy, usage? }]
+      sessions: [],        // [{ id, title, cwd, updatedAt, busy, usage?, engine? }]
       activeId: null,      // selected session id (null = draft new chat)
       view: 'chat',        // 'chat' | 'usage'
       serverReady: false,  // live WS/server status from 'status' events
@@ -42,9 +41,9 @@
         updateChatHeader();
         updateContextMeter(null);
         window.Chat?.renderMessages?.([], null);
+        syncComposerForSession(null);
       }
       window.Sidebar?.render?.(App.state);
-      updateAbortButton();
     },
 
     /**
@@ -66,7 +65,6 @@
       window.Sidebar?.render?.(App.state);
       if (!prevActive || App.state.sessions.some((s) => s.id === prevActive)) {
         updateChatHeader();
-        updateAbortButton();
         return;
       }
       // The active session was deleted: fall back to the next-most-recent.
@@ -83,6 +81,7 @@
       App.showView('chat');
       window.Sidebar?.render?.(App.state);
       updateChatHeader();
+      syncComposerForSession(App.state.sessions.find((s) => s.id === id));
       refreshChatOptions(id);
       notifyPanelSession(id);
       try {
@@ -100,7 +99,6 @@
       } catch (err) {
         console.error('getProfile failed', err);
       }
-      updateAbortButton();
     },
 
     /** Search-result entry point: open a session and jump to a message. */
@@ -116,6 +114,7 @@
       window.Sidebar?.render?.(App.state);
       updateChatHeader();
       updateContextMeter(null);
+      syncComposerForSession(null);
       refreshChatOptions(null);
       notifyPanelSession(null);
       window.Chat?.renderMessages?.([], null);
@@ -307,12 +306,30 @@
     // The v2 model pill (ChatOptions) owns model display; #model-label is the
     // v1 fallback, kept empty while the pill exists to avoid showing it twice.
     $('#model-label').textContent = window.ChatOptions ? '' : App.state.defaultModel || '';
-    updateAbortButton();
   }
 
-  function updateAbortButton() {
-    const session = App.state.sessions.find((s) => s.id === App.state.activeId);
-    $('#abort-btn').hidden = !session?.busy;
+  /**
+   * v5 (R-UX): a session the active engine cannot continue. Only the cli
+   * engine is affected (it lists direct-engine sessions read-only); the
+   * direct engine continues legacy CLI sessions natively (CONTRACT-V4), so
+   * those are never foreign.
+   */
+  function isForeignEngineSession(session) {
+    const engine = App.state.engine;
+    return !!(session && session.engine && engine === 'cli' && session.engine !== engine);
+  }
+
+  /**
+   * v5 (R-UX): sync the composer with the freshly selected session — foreign
+   * sessions become read-only, and the send button starts in STOP mode when
+   * the session is busy. Called on session switches/draft entry only:
+   * mid-session busy flips stream in via WS events (chat.js applyEvent), and
+   * syncing the busy flag from the session list on every refresh would race
+   * the send path (listSessions can lag a just-dispatched prompt).
+   */
+  function syncComposerForSession(session) {
+    window.Chat?.setReadOnly?.(isForeignEngineSession(session));
+    window.Chat?.setBusy?.(!!session?.busy);
   }
 
   /** Compact "% of context window" pill in the chat header. */
@@ -322,39 +339,13 @@
     const limit = Number(usage?.context_limit ?? 0);
     if (!limit) {
       el.textContent = '';
-      el.removeAttribute('title');
       el.style.color = '';
       return;
     }
     const pct = (used / limit) * 100;
     // Small conversations round to 0 — show "<1%" so the meter stays informative.
     el.textContent = pct > 0 && pct < 1 ? '<1%' : `${Math.round(pct)}%`;
-    // v3 tooltip pass (R2): first line explains the metric, second the numbers.
-    el.title =
-      T('chat.context_meter_title', '컨텍스트 사용량 — 모델에 전달 중인 대화 토큰 비율') +
-      '\n' +
-      T('chat.context_title_pre', '컨텍스트 ') +
-      `${intFmt.format(used)} / ${intFmt.format(limit)}` +
-      T('common.tokens', ' 토큰');
     el.style.color = pct >= 80 ? 'var(--warn)' : '';
-  }
-
-  /**
-   * v3 tooltip pass (R2 additive): informative titles for header chrome whose
-   * markup lives outside the composer block. data-i18n-title is re-pointed at
-   * the new key so I18N.applyToDom keeps translating it after the harvest.
-   */
-  function applyHeaderTooltips() {
-    const panelBtn = $('#panel-toggle-btn');
-    if (panelBtn) {
-      panelBtn.setAttribute('data-i18n-title', 'panel.toggle_title');
-      panelBtn.title = T('panel.toggle_title', '작업 패널 — 실행 상태와 도구 활동 보기');
-    }
-    const abortBtn = $('#abort-btn');
-    if (abortBtn) {
-      abortBtn.setAttribute('data-i18n-title', 'chat.abort_title');
-      abortBtn.title = T('chat.abort_title', '중단');
-    }
   }
 
   function setServerStatus(ready, error) {
@@ -362,9 +353,6 @@
     const dot = $('#server-status');
     dot.classList.toggle('ok', !!ready);
     dot.classList.toggle('err', !ready);
-    dot.title = ready
-      ? T('app.server_connected', '서버 연결됨')
-      : T('app.server_disconnected', '서버 연결 끊김') + (error ? `: ${error}` : '');
   }
 
   function scheduleRefreshSessions() {
@@ -382,10 +370,6 @@
     const btn = $('#settings-btn');
     if (!btn) return;
     btn.classList.toggle('has-update', updateReady);
-    btn.title = updateReady
-      ? T('update.ready_title', '업데이트 준비됨 — 설정에서 다시 시작하여 적용') +
-        (version ? ` (v${version})` : '')
-      : T('settings.open_title', '설정');
   }
 
   /* ---- push-event dispatch (window.kimi.onEvent) ---- */
@@ -441,12 +425,11 @@
 
   function wireChrome() {
     $('#new-chat-btn').addEventListener('click', () => App.startNewChat());
-    applyHeaderTooltips();
     $('#usage-nav-btn').addEventListener('click', () => {
       App.showView(App.state.view === 'usage' ? 'chat' : 'usage');
     });
-    // NOTE: #composer / #send-btn / #abort-btn are owned by chat.js (optimistic
-    // echo, busy lock, autoresize). Binding them here too would double-send.
+    // NOTE: #composer / #send-btn are owned by chat.js (optimistic echo, busy
+    // lock/stop-mode, autoresize). Binding them here too would double-send.
     $('#boot-retry-btn').addEventListener('click', () => location.reload());
     // v2 chrome. Search palette (⌘F / #search-open-btn) is wired by R2's
     // search.js; model/swarm pill clicks are wired by R4's ChatOptions.init().

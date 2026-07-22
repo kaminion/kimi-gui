@@ -27,8 +27,12 @@
  *   (guarded) → App.refreshSessionsAfterMutation() (delete-active fallback
  *   lives in app.js: next-most-recent session, else draft).
  *
- * Every new user-visible string goes through T() with a Korean fallback;
- * i18n.js itself is owned by the integration wave.
+ * v5 (R-UX): under the cli engine, direct(built-in)-engine sessions carry a
+ * small '내장' badge (.session-engine-badge) in the meta row — they open
+ * read-only (app.js/chat.js own the composer lock). Under the direct engine
+ * nothing is badged: legacy CLI sessions stay fully continuable (v4).
+ *
+ * Every new user-visible string goes through T() with a Korean fallback.
  */
 'use strict';
 
@@ -57,6 +61,16 @@
     const norm = String(cwd).replace(/[\\/]+$/, '');
     const parts = norm.split(/[\\/]/);
     return parts[parts.length - 1] || norm;
+  }
+
+  /**
+   * v5 (R-UX): sessions the active engine cannot continue (opened read-only;
+   * app.js/chat.js own the composer lock). Only the cli engine has these —
+   * it lists direct-engine sessions it cannot inject into; the direct engine
+   * continues legacy CLI sessions natively, so nothing is foreign under it.
+   */
+  function isForeignEngineSession(session, engine) {
+    return !!(session && session.engine && engine === 'cli' && session.engine !== engine);
   }
 
   const byUpdatedDesc = (a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0);
@@ -552,7 +566,6 @@
     item.setAttribute('role', 'button');
     item.tabIndex = 0;
     item.draggable = true; // v3: HTML5 drag & drop into custom groups
-    if (session.cwd) item.title = session.cwd; // disambiguate identical basenames
 
     const title = document.createElement('div');
     title.className = 'session-title';
@@ -563,18 +576,21 @@
     // Relative time + cwd basename; missing/unknown cwd -> time only.
     const base = basename(session.cwd);
     meta.textContent = relTime(session.updatedAt) + (base ? ' · ' + base : '');
+    // v5 (R-UX): foreign-engine items (direct sessions under the cli engine)
+    // get a small '내장' badge; they open read-only.
+    if (isForeignEngineSession(session, state.engine)) {
+      meta.appendChild(el('span', 'session-engine-badge', T('sidebar.engine_builtin', '내장')));
+    }
 
     // v3: hover actions — rename (pencil) + delete (trash).
     const actions = el('span', 'session-actions');
     const renameBtn = el('button', 'session-action session-rename');
     renameBtn.type = 'button';
     renameBtn.innerHTML = pencilSvg();
-    renameBtn.title = T('sidebar.rename_title', '이름 변경');
     renameBtn.setAttribute('aria-label', T('sidebar.rename_title', '이름 변경'));
     const deleteBtn = el('button', 'session-action session-delete');
     deleteBtn.type = 'button';
     deleteBtn.innerHTML = trashSvg();
-    deleteBtn.title = T('sidebar.delete_title', '삭제');
     deleteBtn.setAttribute('aria-label', T('sidebar.delete_title', '삭제'));
     actions.append(renameBtn, deleteBtn);
 
@@ -634,7 +650,6 @@
     header.setAttribute('role', 'button');
     header.tabIndex = 0;
     header.setAttribute('aria-expanded', String(!group.collapsed));
-    header.title = T('sidebar.group_toggle', '접기/펼치기');
 
     const chevron = document.createElement('span');
     chevron.className = 'session-group-chevron';
@@ -653,7 +668,6 @@
       });
     } else {
       const name = el('span', 'session-group-name custom-group-name', group.name);
-      name.title = group.name;
       name.addEventListener('dblclick', (e) => {
         e.stopPropagation();
         editingGroupId = group.id;
@@ -665,7 +679,6 @@
     const count = el('span', 'session-group-count', String(itemCount));
     const del = el('button', 'custom-group-delete', '×');
     del.type = 'button';
-    del.title = T('sidebar.group_delete_title', '그룹 삭제');
     del.setAttribute('aria-label', T('sidebar.group_delete_title', '그룹 삭제'));
     del.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -693,7 +706,6 @@
     headerRow.appendChild(el('span', 'custom-groups-title', T('sidebar.groups_title', '그룹')));
     const addBtn = el('button', 'custom-group-add', '+');
     addBtn.type = 'button';
-    addBtn.title = T('sidebar.group_add_title', '새 그룹 만들기');
     addBtn.setAttribute('aria-label', T('sidebar.group_add_title', '새 그룹 만들기'));
     addBtn.addEventListener('click', (e) => {
       e.stopPropagation();

@@ -264,7 +264,6 @@
       row.appendChild(el('span', 'panel-task-glyph ' + taskGlyphClass(status), TASK_GLYPH[status] || '○'));
       const title = t?.description || t?.command || t?.kind || '';
       const titleEl = el('span', 'panel-task-title', title);
-      if (t?.kind) titleEl.title = t.kind + (t.command ? ' · ' + t.command : '');
       row.appendChild(titleEl);
       const when = relTime(t?.started_at ?? t?.created_at ?? t?.completed_at);
       if (when) row.appendChild(el('span', 'panel-task-time', when));
@@ -300,7 +299,6 @@
     const list = el('div', 'panel-file-list');
     for (const p of st.files) {
       const chip = el('div', 'panel-file-chip', p);
-      chip.title = p;
       list.appendChild(chip);
     }
     els.files.appendChild(list);
@@ -446,7 +444,6 @@
     if (els.title) els.title.textContent = T('panel.title', '에이전트 작업');
     if (els.closeBtn) {
       els.closeBtn.setAttribute('aria-label', T('panel.close', '패널 닫기'));
-      els.closeBtn.title = T('panel.close', '패널 닫기');
     }
     if (els.empty) els.empty.textContent = T('panel.empty', '실행 중인 작업이 없습니다');
   }

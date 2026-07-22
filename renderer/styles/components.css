@@ -654,25 +654,6 @@
   background: var(--danger-soft);
 }
 
-/* Header abort button: small danger-outlined pill */
-#abort-btn {
-  flex: none;
-  padding: 3px 10px;
-  font-size: 12px;
-  color: var(--danger);
-  background: transparent;
-  border: 0.5px solid var(--danger);
-  border-radius: 999px;
-}
-
-#abort-btn:hover {
-  background: var(--danger-soft);
-}
-
-#abort-btn:active {
-  filter: brightness(0.95);
-}
-
 /* ==========================================================================
    v2 chrome: ghost-icon pills
    #model-select + #swarm-toggle (chat options, carry .pill in the DOM
@@ -892,6 +873,19 @@
 #send-btn:disabled {
   opacity: 0.35;
   pointer-events: none;
+}
+
+/* Busy: the send button morphs into a stop button (chat.js toggles
+   .stop-mode and routes the click to App.abort) — danger-tinted surface,
+   10px rounded-square glyph via the same CSS-mask technique. */
+#send-btn.stop-mode {
+  background: var(--danger-soft);
+}
+
+#send-btn.stop-mode::before {
+  background: var(--danger);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Crect x='2' y='2' width='10' height='10' rx='2.5' fill='black'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Crect x='2' y='2' width='10' height='10' rx='2.5' fill='black'/%3E%3C/svg%3E");
 }
 
 /* ==========================================================================

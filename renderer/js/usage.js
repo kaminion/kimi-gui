@@ -42,9 +42,8 @@
     return bar;
   }
 
-  function quotaCard(title, value, r, caption, tooltip) {
+  function quotaCard(title, value, r, caption) {
     const card = el('div', 'usage-card');
-    if (tooltip) card.title = tooltip; // v3 tooltip pass (R2)
     card.appendChild(el('div', 'usage-card-title', title));
     card.appendChild(el('div', 'usage-card-value', value));
     if (r != null) {
@@ -82,8 +81,7 @@
           T('usage.weekly', '주간 사용량'),
           `${fmtNum(quota.weeklyUsed)} / ${fmtNum(quota.weeklyLimit)}`,
           ratio(quota.weeklyUsed, quota.weeklyLimit),
-          resets,
-          T('usage.weekly_title', '매주 갱신되는 구독 할당량')
+          resets
         )
       );
       grid.appendChild(
@@ -91,8 +89,7 @@
           T('usage.window_5h', '5시간 윈도우'),
           `${fmtNum(quota.window5hUsed)} / ${fmtNum(quota.window5hLimit)}`,
           ratio(quota.window5hUsed, quota.window5hLimit),
-          null,
-          T('usage.window_5h_title', '5시간 단위 요청 속도 제한')
+          null
         )
       );
       if (quota.extraBalance != null) {
@@ -101,8 +98,7 @@
             T('usage.extra_balance', '추가 잔액'),
             fmtNum(quota.extraBalance),
             null,
-            null,
-            T('usage.extra_balance_title', '할당량 초과 시 차감되는 추가 잔액')
+            null
           )
         );
       }
@@ -140,9 +136,6 @@
     bars.appendChild(outBar);
     col.appendChild(bars);
     col.appendChild(el('div', 'daily-day' + (isToday ? ' today' : ''), dayLabel(d?.date ?? '', isToday)));
-    col.title =
-      `${d?.date ?? ''} · ${T('usage.daily.input', '입력')} ${fmtNum(inTok)}` +
-      ` · ${T('usage.daily.output', '출력')} ${fmtNum(outTok)}`;
     return col;
   }
 
@@ -151,9 +144,8 @@
    * /usages API has no daily window, so the daily section shows the live
    * weekly / 5-hour limits next to today's tokens.
    */
-  function limitRow(label, used, limit, tooltip) {
+  function limitRow(label, used, limit) {
     const row = el('div', 'daily-limit-row');
-    if (tooltip) row.title = tooltip;
     const head = el('div', 'daily-limit-head');
     head.appendChild(el('span', 'daily-limit-label', label));
     const r = ratio(used, limit);
@@ -183,16 +175,14 @@
       limitRow(
         T('usage.daily.weekly_limit', '주간 한도'),
         quota.weeklyUsed,
-        quota.weeklyLimit,
-        T('usage.weekly_title', '매주 갱신되는 구독 할당량')
+        quota.weeklyLimit
       )
     );
     box.appendChild(
       limitRow(
         T('usage.daily.window_5h_limit', '5시간 한도'),
         quota.window5hUsed,
-        quota.window5hLimit,
-        T('usage.window_5h_title', '5시간 단위 요청 속도 제한')
+        quota.window5hLimit
       )
     );
     return box;
@@ -275,9 +265,8 @@
 
   /* ---- current-session usage ---- */
 
-  function usageRow(label, value, tooltip) {
+  function usageRow(label, value) {
     const row = el('div', 'usage-row');
-    if (tooltip) row.title = tooltip; // v3 tooltip pass (R2)
     row.appendChild(el('span', 'usage-row-label', label));
     row.appendChild(el('span', 'usage-row-value', value));
     return row;
@@ -289,50 +278,43 @@
     box.appendChild(
       usageRow(
         T('usage.input_tokens', '입력 토큰'),
-        fmtNum(usage?.input_tokens),
-        T('usage.input_tokens_title', '모델에 전달한 토큰 수')
+        fmtNum(usage?.input_tokens)
       )
     );
     box.appendChild(
       usageRow(
         T('usage.output_tokens', '출력 토큰'),
-        fmtNum(usage?.output_tokens),
-        T('usage.output_tokens_title', '모델이 생성한 토큰 수')
+        fmtNum(usage?.output_tokens)
       )
     );
     box.appendChild(
       usageRow(
         T('usage.cache_read_tokens', '캐시 읽기 토큰'),
-        fmtNum(usage?.cache_read_tokens),
-        T('usage.cache_read_tokens_title', '캐시에서 재사용한 입력 토큰 — 비용이 저렴합니다')
+        fmtNum(usage?.cache_read_tokens)
       )
     );
     box.appendChild(
       usageRow(
         T('usage.cache_creation_tokens', '캐시 생성 토큰'),
-        fmtNum(usage?.cache_creation_tokens),
-        T('usage.cache_creation_tokens_title', '후속 재사용을 위해 캐시에 저장한 토큰')
+        fmtNum(usage?.cache_creation_tokens)
       )
     );
     box.appendChild(
       usageRow(
         T('usage.total_cost', '총 비용'),
-        typeof usage?.total_cost_usd === 'number' ? usdFmt.format(usage.total_cost_usd) : '—',
-        T('usage.total_cost_title', '이 세션의 누적 API 비용')
+        typeof usage?.total_cost_usd === 'number' ? usdFmt.format(usage.total_cost_usd) : '—'
       )
     );
     box.appendChild(
       usageRow(
         T('usage.turns', '턴 수'),
-        fmtNum(usage?.turn_count),
-        T('usage.turns_title', '완료된 응답 횟수')
+        fmtNum(usage?.turn_count)
       )
     );
 
     const limit = Number(usage?.context_limit ?? 0);
     const used = Number(usage?.context_tokens ?? 0);
     const ctx = el('div', 'usage-context');
-    ctx.title = T('usage.context_window_title', '현재 대화가 모델에 전달하는 토큰 비율');
     ctx.appendChild(el('div', 'usage-card-title', T('usage.context_window', '컨텍스트 윈도우')));
     ctx.appendChild(
       el(

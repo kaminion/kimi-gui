@@ -191,6 +191,21 @@ body {
   text-overflow: ellipsis;
 }
 
+/* v5 (R-UX): tiny neutral pill on foreign-engine items (direct sessions
+   listed under the cli engine — they open read-only). */
+.session-engine-badge {
+  display: inline-block;
+  margin-left: var(--space-1);
+  padding: 0 4px;
+  font-size: 9px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  background: var(--bg-secondary);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-s);
+  vertical-align: 1px;
+}
+
 /* Busy indicator: pulsing accent dot on the trailing edge */
 .session-item.busy {
   padding-right: var(--space-4);
@@ -297,9 +312,10 @@ body {
 }
 
 /* ---- Chat header (translucent, bottom hairline) ----
-   Right cluster: #model-label, #context-meter, #panel-toggle-btn, #abort-btn
-   ride the 8px flex gap after the flexible title; none of them shrink or
-   wrap. (v3: #model-select/#swarm-toggle moved into #composer-options.) */
+   Right cluster: #model-label, #context-meter, #panel-toggle-btn ride the
+   8px flex gap after the flexible title; none of them shrink or wrap.
+   (v3: #model-select/#swarm-toggle moved into #composer-options; v5: the
+   header abort button is gone — #send-btn itself morphs into STOP.) */
 #chat-header {
   flex: none;
   min-height: 48px;

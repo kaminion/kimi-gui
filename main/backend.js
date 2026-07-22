@@ -21,6 +21,16 @@
  * direct-store shim rooted at that session's workspace dir, so appended turns
  * stay wire-compatible and unknown state.json fields survive.
  *
+ * V5: the merge is now bidirectional — switching engines must never hide chat
+ * history. In CLI mode listSessions joins the daemon's sessions with the
+ * direct-store sessions (engine:'direct', merged newest-first; a broken or
+ * missing direct store degrades to daemon-only), and getMessages/getProfile
+ * route to the local store when the id resolves there. sendPrompt/steer to a
+ * direct-store session in CLI mode are REJECTED with a friendly error event +
+ * thrown error (the daemon knows nothing about these local sessions — switch
+ * back to the direct engine to continue them), while renameSession/
+ * deleteSession stay allowed (purely local file ops).
+ *
  * B1/B2 modules are parallel-swarm deliverables: every cross-module require is
  * lazy and guarded — a missing module degrades to a thrown
  * Error('engine unavailable...'), never a crash.
@@ -62,6 +72,9 @@ const DIRECT_EFFORTS = new Set(['off', 'low', 'high', 'max']);
 const DEFAULT_DIRECT_EFFORT = 'high';
 
 const BUSY_ERROR = '이전 응답이 아직 생성 중입니다. 잠시 후 다시 시도해 주세요.';
+// V5: sending to a direct-store session while the cli engine is active.
+const DIRECT_SESSION_REJECT =
+  '이 내장 엔진 세션은 설정에서 내장 엔진으로 전환해야 이어갈 수 있습니다.';
 
 // ---------------------------------------------------------------------------
 // Module state
@@ -539,12 +552,77 @@ async function resolveDirectSessionStore(sessionId) {
   return null;
 }
 
+/**
+ * V5 (cli mode): resolve an id against the DIRECT STORE ONLY — never the
+ * legacy CLI tree, whose sessions belong to the daemon in cli mode. Returns
+ * { store } or null. Guarded: missing/broken direct modules resolve to null.
+ */
+async function resolveDirectStoreOnly(sessionId) {
+  if (typeof sessionId !== 'string' || !sessionId) return null;
+  let d = null;
+  try {
+    d = loadDirect();
+  } catch {
+    return null;
+  }
+  if (!d) return null;
+  try {
+    const s = await Promise.resolve(d.store.get(sessionId));
+    if (s && typeof s === 'object') return { store: d.store };
+  } catch {
+    /* not a direct-store session */
+  }
+  return null;
+}
+
+/**
+ * V5 (cli mode): direct-store sessions in the same normalized shape the
+ * direct branch emits (engine:'direct', idle). Guarded — any failure yields
+ * [] so listSessions degrades to the daemon-only list.
+ */
+async function listDirectStoreSessions() {
+  let d = null;
+  try {
+    d = loadDirect();
+  } catch {
+    return [];
+  }
+  if (!d) return [];
+  try {
+    const items = await Promise.resolve(d.store.list());
+    return (Array.isArray(items) ? items : [])
+      .filter((s) => s && typeof s.id === 'string')
+      .map((s) => ({
+        id: s.id,
+        title: typeof s.title === 'string' ? s.title : '',
+        cwd: s.cwd ?? '',
+        updatedAt: s.updatedAt ?? null,
+        busy: activeTurns.has(s.id),
+        usage: s.usage ?? null,
+        model: s.model ?? null,
+        effort: s.effort ?? null,
+        engine: 'direct',
+      }));
+  } catch (err) {
+    console.warn(`[backend] direct-store session listing failed (cli engine): ${err.message}`);
+    return [];
+  }
+}
+
 async function listSessions() {
   if (currentEngine === 'cli') {
     const items = await requireCli().listSessions();
-    return (Array.isArray(items) ? items : [])
+    const cliItems = (Array.isArray(items) ? items : [])
       .filter((s) => s && typeof s.id === 'string' && !s.archived)
       .map(normalizeCliSession);
+    // V5: direct-store sessions merge into the cli list too (dedupe by id,
+    // direct wins; combined list sorted newest-first) so switching engines
+    // never hides local chat history.
+    const directItems = await listDirectStoreSessions();
+    const directIds = new Set(directItems.map((s) => s.id));
+    const merged = directItems.concat(cliItems.filter((s) => !directIds.has(s.id)));
+    merged.sort((a, b) => isoToMs(b.updatedAt) - isoToMs(a.updatedAt));
+    return merged;
   }
   const d = requireDirect();
   const items = await Promise.resolve(d.store.list());
@@ -607,6 +685,10 @@ async function createSession({ cwd } = {}) {
 
 async function getMessages(sessionId) {
   if (currentEngine === 'cli') {
+    // V5: a direct-store id reads from the local store (plain files — this
+    // keeps working even when the daemon is down).
+    const resolved = await resolveDirectStoreOnly(sessionId);
+    if (resolved) return Promise.resolve(resolved.store.getMessages(sessionId));
     const client = requireCli();
     // Viewing a session subscribes it to the WS event stream (idempotent).
     if (typeof sessionId === 'string' && sessionId) client.subscribeSession(sessionId);
@@ -637,13 +719,12 @@ function sumUsageRows(rows) {
   return { input, output, turns: Array.isArray(rows) ? rows.length : 0 };
 }
 
-async function getProfile(sessionId) {
-  if (currentEngine === 'cli') return requireCli().getProfile(sessionId);
-  const d = requireDirect();
-  // V4: route by id resolution so a CLI-origin session opened in direct mode
-  // still yields a profile (shim store reads the same state.json + wire.jsonl).
-  const resolved = await resolveDirectSessionStore(sessionId);
-  const store = resolved ? resolved.store : d.store;
+/**
+ * Synthesized REST-shaped profile for a store-backed session. Shared by the
+ * direct branch and by V5 cli-mode direct sessions so the context meter never
+ * errors regardless of the active engine.
+ */
+async function synthesizeProfile(store, sessionId) {
   const s = await Promise.resolve(store.get(sessionId));
   if (!s || typeof s !== 'object') throw new Error(`session not found: ${sessionId}`);
   const model = s.model || DEFAULT_DIRECT_MODEL;
@@ -675,6 +756,22 @@ async function getProfile(sessionId) {
     },
     engine: 'direct',
   };
+}
+
+async function getProfile(sessionId) {
+  if (currentEngine === 'cli') {
+    // V5: a direct-store session gets the same synthesized profile as in
+    // direct mode; every other id belongs to the daemon.
+    const resolved = await resolveDirectStoreOnly(sessionId);
+    if (resolved) return synthesizeProfile(resolved.store, sessionId);
+    return requireCli().getProfile(sessionId);
+  }
+  const d = requireDirect();
+  // V4: route by id resolution so a CLI-origin session opened in direct mode
+  // still yields a profile (shim store reads the same state.json + wire.jsonl).
+  const resolved = await resolveDirectSessionStore(sessionId);
+  const store = resolved ? resolved.store : d.store;
+  return synthesizeProfile(store, sessionId);
 }
 
 // ---------------------------------------------------------------------------
@@ -840,13 +937,33 @@ async function directSendPrompt(sessionId, text) {
 // Sessions — prompt / steer / abort / approvals / questions
 // ---------------------------------------------------------------------------
 
+/**
+ * V5 (cli mode): a direct-store session cannot continue under the cli engine
+ * (the daemon knows nothing about these local sessions — attempting a daemon
+ * injection would just 404 or pollute the daemon's tree). Rejects with the
+ * friendly error event + a thrown error. Checked BEFORE requireCli() so the
+ * rejection works even when the daemon is down.
+ */
+async function rejectIfDirectSession(sessionId) {
+  if (await resolveDirectStoreOnly(sessionId)) {
+    emitSession(sessionId, { type: 'error', message: DIRECT_SESSION_REJECT });
+    throw new Error(DIRECT_SESSION_REJECT);
+  }
+}
+
 async function sendPrompt(sessionId, text) {
-  if (currentEngine === 'cli') return requireCli().sendPrompt(sessionId, text);
+  if (currentEngine === 'cli') {
+    await rejectIfDirectSession(sessionId);
+    return requireCli().sendPrompt(sessionId, text);
+  }
   return directSendPrompt(sessionId, text);
 }
 
 async function steer(sessionId, text) {
-  if (currentEngine === 'cli') return requireCli().steer(sessionId, text);
+  if (currentEngine === 'cli') {
+    await rejectIfDirectSession(sessionId);
+    return requireCli().steer(sessionId, text);
+  }
   if (activeTurns.has(sessionId)) {
     const message = '실행 중에는 스티어할 수 없습니다. 응답이 끝난 후 다시 시도해 주세요.';
     emitSession(sessionId, { type: 'error', message });
@@ -855,16 +972,21 @@ async function steer(sessionId, text) {
   return directSendPrompt(sessionId, text);
 }
 
-async function abort(sessionId) {
-  if (currentEngine === 'cli') return requireCli().abort(sessionId);
+/** Interrupt a direct-engine turn (no-op when idle); true when one was active. */
+function abortDirectTurn(sessionId) {
   const turn = activeTurns.get(sessionId);
-  if (!turn) return { ok: false };
+  if (!turn) return false;
   for (const resolve of turn.approvals.values()) {
     try { resolve('rejected'); } catch { /* already settled */ }
   }
   turn.approvals.clear();
-  turn.controller.abort();
-  return { ok: true };
+  try { turn.controller.abort(); } catch { /* ignore */ }
+  return true;
+}
+
+async function abort(sessionId) {
+  if (currentEngine === 'cli') return requireCli().abort(sessionId);
+  return { ok: abortDirectTurn(sessionId) };
 }
 
 async function respondApproval(sessionId, approvalId, decision) {
@@ -988,6 +1110,9 @@ async function renameSession(sessionId, title) {
   const clean = String(title ?? '').trim();
   if (!clean) throw new Error('title must not be empty');
   if (currentEngine === 'cli') {
+    // V5: renaming a direct-store session is a local file op — allowed.
+    const resolved = await resolveDirectStoreOnly(sessionId);
+    if (resolved) return Promise.resolve(resolved.store.rename(sessionId, clean));
     // Verified live: POST /sessions/{id}/profile {title} renames (list +
     // state.json reflect it, isCustomTitle is set server-side).
     return requireCli().renameSession(sessionId, clean);
@@ -1005,6 +1130,13 @@ async function renameSession(sessionId, title) {
 
 async function deleteSession(sessionId) {
   if (currentEngine === 'cli') {
+    // V5: deleting a direct-store session is a local file op — allowed
+    // (interrupt a locally-active turn first, same as the direct branch).
+    const resolved = await resolveDirectStoreOnly(sessionId);
+    if (resolved) {
+      abortDirectTurn(sessionId);
+      return Promise.resolve(resolved.store.remove(sessionId));
+    }
     const client = requireCli();
     try { client.unsubscribeSession(sessionId); } catch { /* ignore */ }
     // Soft-delete: POST /sessions/{id}:archive (verified live); the list
