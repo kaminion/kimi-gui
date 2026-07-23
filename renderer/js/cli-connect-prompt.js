@@ -101,21 +101,49 @@
     );
     description.id = 'cli-connect-description';
 
-    const benefit = el('div', 'cli-connect-benefit');
-    benefit.append(
-      el('strong', '', T('cli_prompt.benefit_title', 'CLI 에이전트 모드')),
-      el(
-        'span',
-        '',
-        T('cli_prompt.benefit_desc', '스웜, 전체 CLI 도구, CLI 세션 실행을 지원합니다.')
-      )
+    const capabilities = el('section', 'cli-connect-capabilities');
+    const capabilitiesTitle = el(
+      'h3',
+      'cli-connect-capabilities-title',
+      T('cli_prompt.capabilities_title', '연결하면 사용할 수 있는 기능')
     );
+    capabilitiesTitle.id = 'cli-connect-capabilities-title';
+    capabilities.setAttribute('aria-labelledby', capabilitiesTitle.id);
+
+    const capabilityList = el('div', 'cli-connect-capability-list');
+    const featureCopy = [
+      [
+        T('cli_prompt.feature_swarm_title', 'Swarm 및 서브에이전트'),
+        T('cli_prompt.feature_swarm_desc', '여러 에이전트가 독립적인 작업을 나누어 병렬로 처리합니다.'),
+      ],
+      [
+        T('cli_prompt.feature_plan_title', 'Plan mode'),
+        T('cli_prompt.feature_plan_desc', '파일을 수정하기 전에 작업 방향과 순서를 검토합니다.'),
+      ],
+      [
+        T('cli_prompt.feature_tools_title', '전체 CLI 도구'),
+        T('cli_prompt.feature_tools_desc', 'Kimi Code CLI의 에이전트, 도구, 워크스페이스 기능을 사용합니다.'),
+      ],
+      [
+        T('cli_prompt.feature_sessions_title', 'CLI 세션 연속성'),
+        T('cli_prompt.feature_sessions_desc', 'Kimi Code CLI에서 만든 세션을 에이전트 모드로 이어서 작업합니다.'),
+      ],
+    ];
+    for (const [featureTitle, featureDescription] of featureCopy) {
+      const item = el('div', 'cli-connect-capability');
+      item.append(
+        el('strong', 'cli-connect-capability-title', featureTitle),
+        el('span', 'cli-connect-capability-description', featureDescription)
+      );
+      capabilityList.appendChild(item);
+    }
+    capabilities.append(capabilitiesTitle, capabilityList);
 
     const status = el('p', `cli-connect-status${statusKind ? ` ${statusKind}` : ''}`, currentStatus());
     status.id = 'cli-connect-status';
     status.setAttribute('role', 'status');
     status.setAttribute('aria-live', 'polite');
-    body.append(description, benefit, status);
+    body.append(description, capabilities, status);
 
     const footer = el('div', 'cli-connect-footer');
     const neverLabel = el('label', 'cli-connect-never');

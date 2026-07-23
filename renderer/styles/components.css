@@ -1067,7 +1067,7 @@
    stay in one compact decision surface. */
 .modal-cli-connect {
   width: calc(100% - 48px);
-  max-width: 460px;
+  max-width: 520px;
   padding: 24px;
 }
 
@@ -1081,30 +1081,62 @@
   color: var(--text-secondary);
 }
 
-.cli-connect-benefit {
-  display: grid;
-  gap: 3px;
+.cli-connect-capabilities {
   margin-top: var(--space-3);
-  padding: 12px;
+  padding: 12px 14px;
   background: var(--bg-secondary);
   border: 0.5px solid var(--border);
   border-radius: var(--radius-m);
 }
 
-.cli-connect-benefit strong {
+.cli-connect-capabilities-title {
+  margin: 0 0 10px;
   font-size: 12px;
   font-weight: 600;
   color: var(--text);
 }
 
-.cli-connect-benefit span {
+.cli-connect-capability-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 18px;
+  row-gap: 0;
+}
+
+.cli-connect-capability {
+  min-width: 0;
+  padding: 9px 0;
+  border-top: 0.5px solid var(--border);
+}
+
+.cli-connect-capability:nth-child(-n + 2) {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.cli-connect-capability-title,
+.cli-connect-capability-description {
+  display: block;
+}
+
+.cli-connect-capability-title {
   font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.cli-connect-capability-description {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.45;
   color: var(--text-secondary);
 }
 
 .cli-connect-status {
   min-height: 18px;
-  margin-top: 12px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 0.5px solid var(--border);
   font-size: 12px;
   color: var(--text-dim);
   overflow-wrap: anywhere;
@@ -1156,6 +1188,15 @@
 }
 
 @media (max-width: 560px) {
+  .cli-connect-capability-list {
+    grid-template-columns: 1fr;
+  }
+
+  .cli-connect-capability:nth-child(2) {
+    padding-top: 9px;
+    border-top: 0.5px solid var(--border);
+  }
+
   .cli-connect-footer {
     align-items: stretch;
     flex-direction: column;
