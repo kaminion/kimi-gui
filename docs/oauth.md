@@ -1,4 +1,4 @@
-# Kimi Desktop — OAuth (CLI-free login, `main/auth.js`)
+# Kimi-GUI — OAuth (CLI-free login, `main/auth.js`)
 
 V3 lets the app talk to `https://api.kimi.com/coding/v1` **without the Kimi Code CLI**.
 Login is an RFC 8628 **device authorization flow** against `https://auth.kimi.com`,

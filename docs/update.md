@@ -1,4 +1,4 @@
-# 자동 업데이트 (main/updater.js)
+# Kimi-GUI 자동 업데이트 (`main/updater.js`)
 
 `electron-updater` + GitHub Releases 기반 자동 업데이트. 구현은 `main/updater.js`이며,
 CONTRACT-V2 §Auto-update를 따른다.

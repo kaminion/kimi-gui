@@ -42,7 +42,7 @@ const MODELS = [
 ];
 
 const SYSTEM_PROMPT = [
-  'You are Kimi, a coding assistant running inside the Kimi Desktop app.',
+  'You are Kimi, a coding assistant running inside the Kimi-GUI app.',
   'You help the user with software engineering tasks in their current working directory.',
   'Working directory (cwd): {{CWD}}. All relative paths resolve against it.',
   '',

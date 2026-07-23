@@ -66,7 +66,7 @@ function wireUpdater(send) {
     updater.register({ ipcMain, send });
     updaterWired = true;
   } catch (err) {
-    console.warn(`[kimi-desktop] updater.register failed: ${err.message}`);
+    console.warn(`[Kimi-GUI] updater.register failed: ${err.message}`);
   }
 }
 
@@ -237,7 +237,7 @@ function registerIpc({ backend, getWindow, broadcast }) {
       // ~/.kimi-code/credentials itself (works for both engines).
       return await quota.getQuota({});
     } catch (err) {
-      console.warn(`[kimi-desktop] getQuota failed: ${err.message}`);
+      console.warn(`[Kimi-GUI] getQuota failed: ${err.message}`);
       return null; // UI falls back to per-session usage only
     }
   });

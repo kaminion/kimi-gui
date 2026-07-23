@@ -34,7 +34,7 @@ function loadAutoUpdater() {
   } catch (err) {
     updaterUnavailable = true;
     autoUpdater = null;
-    console.warn(`[kimi-desktop] electron-updater unavailable: ${err && err.message ? err.message : err}`);
+    console.warn(`[Kimi-GUI] electron-updater unavailable: ${err && err.message ? err.message : err}`);
   }
   return autoUpdater;
 }
@@ -74,7 +74,7 @@ function report(send, { status, version = null, percent, message = null }) {
   try {
     send(payload);
   } catch (err) {
-    console.warn(`[kimi-desktop] update event push failed: ${err && err.message ? err.message : err}`);
+    console.warn(`[Kimi-GUI] update event push failed: ${err && err.message ? err.message : err}`);
   }
 }
 
@@ -101,7 +101,7 @@ async function runCheck(send) {
     .catch((err) => {
       if (isUnconfiguredError(err)) return { status: 'dev' };
       const message = truncate(err && err.message ? err.message : err);
-      console.warn(`[kimi-desktop] update check failed: ${message}`);
+      console.warn(`[Kimi-GUI] update check failed: ${message}`);
       report(send, { status: 'error', message });
       return snapshot();
     })
@@ -121,7 +121,7 @@ async function quitAndInstall() {
     try {
       updater.quitAndInstall(false, true);
     } catch (err) {
-      console.warn(`[kimi-desktop] quitAndInstall failed: ${err && err.message ? err.message : err}`);
+      console.warn(`[Kimi-GUI] quitAndInstall failed: ${err && err.message ? err.message : err}`);
     }
   }, 100);
   const result = { status: 'downloaded' };
@@ -146,7 +146,7 @@ async function downloadUpdate(send) {
     .then(() => snapshot())
     .catch((err) => {
       const message = truncate(err && err.message ? err.message : err);
-      console.warn(`[kimi-desktop] update download failed: ${message}`);
+      console.warn(`[Kimi-GUI] update download failed: ${message}`);
       report(send, { status: 'error', version: current.version, message });
       return snapshot();
     })
@@ -158,7 +158,7 @@ async function downloadUpdate(send) {
 
 function register({ ipcMain, send } = {}) {
   if (!ipcMain || typeof ipcMain.handle !== 'function') {
-    console.error('[kimi-desktop] updater.register: ipcMain missing — update IPC not wired');
+    console.error('[Kimi-GUI] updater.register: ipcMain missing — update IPC not wired');
     return;
   }
   const safeSend = typeof send === 'function' ? send : () => {};

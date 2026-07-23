@@ -1,6 +1,9 @@
 # CONTRACT V4 (binding, additive)
 
-V4 items: app rename to **kimi-gui**; unified session list (direct mode also shows legacy CLI
+> Historical note: V4 introduced the lowercase npm/repository identifier
+> `kimi-gui`. The current user-facing product name is **Kimi-GUI**.
+
+V4 items: app rename to **Kimi-GUI**; unified session list (direct mode also shows legacy CLI
 sessions); sidebar = custom groups + single '최근 내역' section; daily section shows limits;
 panel close fix; swarm configurability; device-login must open `verification_uri_complete`.
 
@@ -42,8 +45,8 @@ NOBODY touches renderer/js/i18n.js (integration harvests).
   at `<wd_*>/<sid>` parent? choose the cleanest shim; MUST NOT create duplicate state fields).
   deleteSession(cli) = archive. Capabilities unchanged. cli engine behavior untouched.
 - Rename app: package.json `{name:'kimi-gui', version:'0.4.0'}`; electron-builder.yml
-  `productName: "kimi-gui"`, `appId: com.kimi.gui`; README.md: replace 'Kimi Desktop' name
-  references with kimi-gui (title + mentions; keep prose natural). npm lockfile name field: run
+  `productName: "Kimi-GUI"`, `appId: com.kimi.gui`; README.md: use **Kimi-GUI**
+  for the display name. npm lockfile name field: run
   `npm install --package-lock-only` to sync.
 
 ## R1 — sidebar '최근 내역'
@@ -72,9 +75,9 @@ NOBODY touches renderer/js/i18n.js (integration harvests).
   two progress rows — 주간 한도 (used/limit %, bar) and 5시간 한도 — from getQuota(); quota null →
   subtle '한도 정보를 불러올 수 없습니다' line; tooltips via T(). Styles: additive end-block in
   renderer/styles/components.css comment /* usage v4 */ (R3 file — append ONLY).
-- index.html: `<title>` → `kimi-gui` (only that line).
+- index.html: `<title>` → `Kimi-GUI` (only that line).
 
 ## Integration wave (after swarm)
 Harvest T keys → i18n.js; CDP E2E: legacy CLI sessions visible+openable+continuable in direct
 mode, recent section, panel close, login URL contains user_code (temp home, cancel), usage limit
-rows, swarm disabled pill + default-on in cli engine, window title kimi-gui; screenshots; commit.
+rows, swarm disabled pill + default-on in cli engine, window title Kimi-GUI; screenshots; commit.

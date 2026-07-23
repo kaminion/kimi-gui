@@ -7,7 +7,7 @@
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'self'; script-src 'self' 'sha256-GvdpNkRIutULfcbOlm8oyKuuEdFxTsG0Fmi5UZBCz2A='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>kimi-gui</title>
+  <title>Kimi-GUI</title>
   <!-- Apply the persisted theme before first paint to avoid a flash.
        Dark is the app default (CSS falls back to dark when unset), so only an
        explicit dark/light choice needs to be stamped onto <html>. -->
@@ -23,7 +23,7 @@
 <body>
   <div id="titlebar"></div>
   <!-- Splash gate (plays on every launch; R1 owns its lifecycle). -->
-  <div id="splash"><div id="splash-logo"></div><div id="splash-word">Kimi</div></div>
+  <div id="splash"><div id="splash-logo"></div><div id="splash-word">Kimi-GUI</div></div>
   <!-- Onboarding (v3: login gate only — the app works without the CLI). -->
   <div id="onboarding" hidden>
     <div id="onboarding-card">
@@ -199,7 +199,7 @@
        flex-direction:column; align-items:center; justify-content:center; gap:16px;
        padding:32px; text-align:center; background:var(--bg, #fff); color:var(--text, #1d1d1f);
        font-family:var(--font-ui, -apple-system, sans-serif);">
-    <h1 style="font-size:17px; font-weight:600; margin:0;" data-i18n="app.boot_error_title">Kimi couldn’t start</h1>
+    <h1 style="font-size:17px; font-weight:600; margin:0;" data-i18n="app.boot_error_title">Kimi-GUI couldn’t start</h1>
     <p id="boot-error-message" style="font-size:13px; margin:0; max-width:420px;
        color:var(--text-secondary, #6e6e73); word-break:break-all;"></p>
     <p style="font-size:12px; margin:0; max-width:420px; color:var(--text-dim, #86868b);"

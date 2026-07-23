@@ -1,11 +1,14 @@
-# kimi-gui [![Version](https://img.shields.io/badge/version-0.6.0-blue)](./package.json) [![Commit Activity](https://img.shields.io/github/commit-activity/m/kaminion/kimi-gui)](https://github.com/kaminion/kimi-gui/graphs/commit-activity) [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey)](#requirements)
+# Kimi-GUI [![Version](https://img.shields.io/badge/version-0.6.1-blue)](./package.json) [![Commit Activity](https://img.shields.io/github/commit-activity/m/kaminion/kimi-gui)](https://github.com/kaminion/kimi-gui/graphs/commit-activity) [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey)](#requirements)
 
-[Kimi Code](https://www.kimi.com/code/) | [Project overview](https://github.com/kaminion/kimi-gui/blob/main/docs/kimi-code-made-easier.md) | [GitHub](https://github.com/kaminion/kimi-gui) | [한국어](./README.ko.md)
+[Kimi Code](https://www.kimi.com/code/) | [Usage guide](./docs/kimi-code-made-easier.md) | [GitHub](https://github.com/kaminion/kimi-gui) | [한국어](./README.ko.md)
 
 > [!IMPORTANT]
-> **kimi-gui is an independent community project, not an official Moonshot AI product.** It uses Kimi Code APIs and the same local credentials as the official Kimi Code CLI.
+> **Kimi-GUI is an independent community project, not an official Moonshot AI product.** It uses Kimi Code APIs and the same local credentials as the official Kimi Code CLI.
 
-kimi-gui is a desktop interface for [Kimi Code](https://www.kimi.com/code/). Sign in with your Kimi account, then use conversations, model and thinking controls, agent activity, search, and usage visibility in a focused Electron app—without requiring a terminal.
+Kimi-GUI is a desktop interface for [Kimi Code](https://www.kimi.com/code/).
+Open a project, describe the outcome you want, adjust the work while it runs,
+and review every changed file from one focused workspace—without requiring a
+terminal.
 
 ## Getting Started
 
@@ -18,13 +21,54 @@ kimi-gui is a desktop interface for [Kimi Code](https://www.kimi.com/code/). Sig
 
 ### Sign in and start
 
-Launch kimi-gui, select **Log in**, and complete Kimi's verification in your browser. That's it—the default built-in engine works without installing or configuring the Kimi Code CLI.
+Launch Kimi-GUI, select **Log in**, and complete Kimi's verification in your browser. That's it—the default built-in engine works without installing or configuring the Kimi Code CLI.
 
-![kimi-gui first-launch screen with a simple Log in to Kimi prompt](./docs/media/kimi-login.png)
+![Kimi-GUI first-launch screen with a simple Log in to Kimi prompt](./docs/media/kimi-login.png)
 
 Your credentials are stored under `~/.kimi-code/credentials` and can be shared with Kimi Code CLI, so one Kimi sign-in works across both experiences.
 
-When the built-in engine starts, one optional dialog offers CLI agent mode. It shows **Connect CLI** when the CLI is ready or **Install CLI** when it is missing, with a **Do not show again** option.
+When the built-in engine starts, one optional dialog offers CLI agent mode. It explains Swarm and sub-agents, Plan mode, the full CLI toolset, and CLI session continuity before showing **Connect CLI** or **Install CLI**. A **Do not show again** option remains available.
+
+## Use Kimi-GUI
+
+### Understand a project
+
+Choose the project directory and branch above the empty prompt, then ask a
+question grounded in the repository:
+
+```text
+Explain how authentication flows through this project. Point me to the key files.
+```
+
+### Make a focused change
+
+Describe the result and the constraints that matter. Kimi can inspect the
+project, edit files, run local tools with approval, and report the outcome in
+the same conversation.
+
+```text
+Fix the Windows startup failure and add a regression test.
+Keep the public API unchanged.
+```
+
+### Adjust work in progress
+
+Keep typing while Kimi is working. Enter sends a steering message without
+ending the active run. The message remains visible for a short grace period, so
+you can edit or delete it before delivery.
+
+```text
+Also cover computers where no Kimi server is already running.
+```
+
+### Review what changed
+
+The summary above the prompt reports changed files plus added and deleted
+lines. Select it to open the **Changes** tab, inspect each diff, then switch to
+**Activity** in the same right-side panel when you want the execution history.
+
+For a screenshot-led walkthrough of both engines and these workflows, see
+the [usage guide](./docs/kimi-code-made-easier.md).
 
 ### Run from source
 
@@ -51,17 +95,17 @@ Start a conversation, watch thinking and answer tokens stream in, inspect agent 
 
 The demo starts with one-time Kimi sign-in, confirms the shared account and both engine choices, then follows a real built-in response into Agent activity and Usage.
 
-![kimi-gui demo showing Kimi sign-in, both engine choices, a streamed response, agent activity, and usage](./docs/media/demo.gif)
+![Kimi-GUI demo showing Kimi sign-in, both engine choices, a streamed response, agent activity, and usage](./docs/media/demo.gif)
 
-### Kimi Code, `kimi web`, and kimi-gui
+### Kimi Code, `kimi web`, and Kimi-GUI
 
-[Kimi Code](https://www.kimi.com/code/) is the underlying coding service. `kimi web` is an official Kimi Code CLI command that exposes the CLI runtime as a local REST and WebSocket service. kimi-gui is an independent Electron desktop client that offers two ways to use them: connect directly to the Kimi Code API, or manage `kimi web` for the full CLI agent workflow.
+[Kimi Code](https://www.kimi.com/code/) is the underlying coding service. `kimi web` is an official Kimi Code CLI command that exposes the CLI runtime as a local REST and WebSocket service. Kimi-GUI is an independent Electron desktop client that offers two ways to use them: connect directly to the Kimi Code API, or manage `kimi web` for the full CLI agent workflow.
 
 Switch engines from Settings. The app restarts into the selected mode and keeps both kinds of sessions visible.
 
 | | Built-in engine (default) | CLI agent mode |
 | --- | --- | --- |
-| Runtime | Runs directly inside kimi-gui | Official Kimi Code CLI, launched and managed by the app |
+| Runtime | Runs directly inside Kimi-GUI | Official Kimi Code CLI, launched and managed by the app |
 | Dependency | No CLI installation required | Kimi Code CLI installed locally |
 | Transport | Direct Kimi Code API connection | Local REST + WebSocket through `kimi web` |
 | Sign-in | One Kimi login, shared with the CLI | The same shared Kimi credentials |
@@ -83,8 +127,9 @@ branch.
 Choose a model and thinking effort per conversation from compact composer
 controls. CLI agent mode exposes an explicit `Swarm ON/OFF` control. While a
 response is running, the prompt stays editable: Enter steers the current work,
-and a separate stop button remains available. A live context meter shows how
-much of the active model window is in use.
+and a separate stop button remains available. A queued adjustment can be
+edited or deleted before the engine consumes it. A live context meter shows
+how much of the active model window is in use.
 
 ### Agent activity and usage
 

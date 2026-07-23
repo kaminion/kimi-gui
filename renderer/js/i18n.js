@@ -25,7 +25,7 @@
   const TABLE = {
     ko: {
       'app.boot_error_hint': '다시 시도하세요. CLI 에이전트 모드를 사용할 수 없으면 내장 엔진으로 자동 전환됩니다.',
-      'app.boot_error_title': 'Kimi를 시작할 수 없습니다',
+      'app.boot_error_title': 'Kimi-GUI를 시작할 수 없습니다',
       'app.boot_retry': '다시 시도',
       'app.error.cli_or_login': 'Kimi Code CLI를 찾을 수 없거나 로그인이 필요합니다.',
       'app.error.cli_or_server': 'Kimi Code CLI를 찾을 수 없거나 로컬 서버를 시작하지 못했습니다.',
@@ -389,7 +389,7 @@
     },
     en: {
       'app.boot_error_hint': 'Try again. If CLI agent mode is unavailable, Kimi switches to the built-in engine automatically.',
-      'app.boot_error_title': 'Kimi couldn’t start',
+      'app.boot_error_title': 'Kimi-GUI couldn’t start',
       'app.boot_retry': 'Try again',
       'app.error.cli_or_login': 'Kimi Code CLI was not found, or login is required.',
       'app.error.cli_or_server': 'Kimi Code CLI was not found, or the local server failed to start.',

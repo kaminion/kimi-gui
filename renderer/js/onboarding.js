@@ -108,7 +108,7 @@
     const logo = $('splash-logo');
     if (logo && !logo.firstChild) logo.innerHTML = logoSvg(72);
     const word = $('splash-word');
-    if (word && !word.textContent.trim()) word.textContent = 'Kimi';
+    if (word && !word.textContent.trim()) word.textContent = 'Kimi-GUI';
     if (reducedMotion()) { splash.hidden = true; return; } // instant swap
     void splash.offsetWidth; // commit initial styles so the transitions run
     splash.classList.add('on');

@@ -1,4 +1,4 @@
-# Kimi Desktop — Architecture Contract (binding)
+# Kimi-GUI — Architecture Contract (binding)
 
 Desktop GUI with a built-in direct engine and an optional **Kimi Code CLI** agent mode
 (`kimi`, v0.28.1+). In CLI mode the app spawns `kimi web --no-open` (local REST +
@@ -56,7 +56,9 @@ class KimiClient extends EventEmitter {
   request(method, path, body?)              // fetch wrapper, unwraps envelope, throws on code!=0
   healthz(); meta(); auth();
   listSessions(); createSession({ cwd, model? }); getSession(id); getProfile(id);
-  getMessages(id); sendPrompt(id, text); steer(id, text); abort(id);
+  getMessages(id); sendPrompt(id, text); steer(id, text);
+  holdSteer(id, promptId); resumeSteer(id, promptId);
+  updateSteer(id, promptId, text); deleteSteer(id, promptId); abort(id);
   listApprovals(id); respondApproval(id, approvalId, decision);
   listQuestions(id); answerQuestion(id, tail, body);
   connect();              // open WS, client_hello, auto resubscribe
@@ -86,6 +88,10 @@ getMessages(sessionId) -> [message]
 getProfile(sessionId) -> profile        // includes usage
 sendPrompt(sessionId, text)
 steer(sessionId, text)
+holdSteer(sessionId, promptId)
+resumeSteer(sessionId, promptId)
+updateSteer(sessionId, promptId, text)
+deleteSteer(sessionId, promptId)
 abort(sessionId)
 respondApproval(sessionId, approvalId, decision)   // decision: 'approve' | 'reject' (verify in protocol.md)
 answerQuestion(sessionId, tail, body)

@@ -22,7 +22,7 @@ const { app, BrowserWindow, Menu, nativeImage } = require('electron');
 const path = require('node:path');
 
 // Brand: menu bar / Dock label in dev; packaged builds use productName + icns/ico.
-app.setName('kimi-gui');
+app.setName('Kimi-GUI');
 const APP_ICON = path.join(__dirname, '..', 'assets', 'icon.png');
 
 const backend = require('./backend');
@@ -100,7 +100,7 @@ function maybeAutoCheckUpdates() {
       updater.checkSilently({ send: broadcast });
     }
   } catch (err) {
-    console.warn(`[kimi-desktop] silent update check skipped: ${err.message}`);
+    console.warn(`[Kimi-GUI] silent update check skipped: ${err.message}`);
   }
 }
 
@@ -139,7 +139,7 @@ function installAppMenu() {
     createWindow();
     backend
       .init({ app, send: broadcast })
-      .catch((err) => console.error(`[kimi-desktop] backend init failed: ${err.message}`));
+      .catch((err) => console.error(`[Kimi-GUI] backend init failed: ${err.message}`));
     maybeAutoCheckUpdates();
   });
 
@@ -161,7 +161,7 @@ function installAppMenu() {
     event.preventDefault();
     const shutdown = Promise.resolve()
       .then(() => backend.shutdown())
-      .catch((err) => console.warn(`[kimi-desktop] backend shutdown failed: ${err.message}`));
+      .catch((err) => console.warn(`[Kimi-GUI] backend shutdown failed: ${err.message}`));
     const timeout = new Promise((resolve) => setTimeout(resolve, 3000));
     Promise.race([shutdown, timeout]).finally(() => app.quit());
   });

@@ -46,7 +46,7 @@ class KimiClient extends EventEmitter {
     this.ws = null;
     this.wsReady = false;          // server_hello seen
     this.closed = false;           // shutdown() called — no more reconnects
-    this.clientId = `kimi-desktop-${randomUUID()}`;
+    this.clientId = `kimi-gui-${randomUUID()}`;
     this.subscriptions = new Map(); // sessionId -> cursor {seq, epoch?}
     this.reconnectAttempts = 0;
     this.reconnectTimer = null;

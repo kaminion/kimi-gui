@@ -17,7 +17,7 @@ const path = require('node:path');
 
 if (process.platform !== 'darwin') process.exit(0);
 
-const APP_NAME = 'kimi-gui';
+const APP_NAME = 'Kimi-GUI';
 const plist = path.join(
   __dirname,
   '..',

@@ -1,8 +1,8 @@
-# electron-builder configuration for kimi-gui
+# electron-builder configuration for Kimi-GUI
 # Docs: https://www.electron.build/configuration
 
 appId: com.kimi.gui
-productName: "kimi-gui"
+productName: "Kimi-GUI"
 
 directories:
   output: dist
@@ -56,7 +56,7 @@ nsis:
   oneClick: false # assisted installer with wizard pages
   perMachine: false # per-user install, no admin rights needed
   allowToChangeInstallationDirectory: true
-  shortcutName: Kimi
+  shortcutName: Kimi-GUI
 
 portable:
   artifactName: ${productName}-${version}-win-${arch}-portable.${ext}

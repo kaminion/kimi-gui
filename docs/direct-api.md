@@ -85,11 +85,14 @@ an `is_error` placeholder result). Loop: request → execute `tool_use` blocks
 (with `hooks.requireApproval`) → append results → re-request, ≤25 iterations.
 
 While that loop is busy, `backend.steer()` queues user adjustments on the
-active turn. `direct-client` drains them at the next safe model boundary: after
-an assistant response, or together with that step's `tool_result` blocks. The
-store records each adjustment as a user message after the corresponding step.
-A request arriving during final persistence is continued as another direct
-turn without dropping the renderer's busy state.
+active turn. Each adjustment stays editable for four seconds. Opening the
+editor holds delivery, saving replaces the text and restarts the grace period,
+and deleting removes it from the queue. `direct-client` drains ready
+adjustments at the next safe model boundary: after an assistant response, or
+together with that step's `tool_result` blocks. The store records each
+delivered adjustment as a user message after the corresponding step. A request
+arriving during final persistence is continued as another direct turn without
+dropping the renderer's busy state.
 
 ## Error shapes (verified)
 

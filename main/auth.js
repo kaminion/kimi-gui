@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * auth.js — CLI-free Kimi OAuth for Kimi Desktop v3 (CONTRACT-V3, B1).
+ * auth.js — CLI-free Kimi OAuth for Kimi-GUI v3 (CONTRACT-V3, B1).
  *
  * RFC 8628 device authorization flow against https://auth.kimi.com, wire-
  * compatible with the Kimi Code CLI (`kimi login`) so the app and the CLI can

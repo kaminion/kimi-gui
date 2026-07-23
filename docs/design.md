@@ -1,4 +1,4 @@
-# Kimi Desktop — Design System
+# Kimi-GUI — Design System
 
 Apple-HIG, **dark-first charcoal-premium** (v3) design system for the Kimi
 Desktop chat UI. Implemented in three stylesheets, loaded in this order
@@ -140,7 +140,9 @@ Nothing renders pure black, so dark detail is never crushed.
   A new conversation alone shows `#draft-context` above it, restoring the most
   recently used project and listing local branches. During an active run the
   textarea remains editable for steering; `#send-btn` sends the adjustment and
-  `#composer-abort-btn` remains a separate stop action.
+  `#composer-abort-btn` remains a separate stop action. A waiting adjustment
+  renders as `.msg-steer` with compact Edit and Delete actions. Editing pauses
+  delivery and opens an inline textarea with Save and Cancel controls.
 - `#usage-view` is a scrollable column: `#quota-cards` wraps a
   `.usage-section-title` plus `.usage-card-grid`
   (`repeat(auto-fit, minmax(220px, 1fr))` of `.usage-card`s); the

@@ -1,19 +1,36 @@
-# Kimi Code and Kimi CLI, Made Easier
+# Using Kimi-GUI
 
 **One Kimi login. Two ways to work. One focused desktop app.**
 
-[kimi-gui](https://github.com/kaminion/kimi-gui) is an open-source desktop
+[Kimi-GUI](https://github.com/kaminion/kimi-gui) is an open-source desktop
 interface for Kimi Code and Kimi Code CLI. It is designed for people who want
 the power of an AI coding agent without spending their day managing terminal
 windows, remembering commands, or guessing what the agent changed.
 
-With kimi-gui, you can start with a simple built-in experience and move to the
+With Kimi-GUI, you can start with a simple built-in experience and move to the
 full Kimi CLI agent workflow when you need more advanced capabilities. Your
 conversations, project context, agent activity, file changes, and usage stay
 visible in one place.
 
-> kimi-gui is an independent community project. It is not an official
+> Kimi-GUI is an independent community project. It is not an official
 > Moonshot AI product.
+
+![The Kimi-GUI startup wordmark](https://raw.githubusercontent.com/kaminion/kimi-gui/main/docs/media/release-0.6.1-kimi-gui-brand.png)
+
+## Start in three steps
+
+1. Open Kimi-GUI and sign in with your Kimi account.
+2. Choose a project directory and an existing Git branch.
+3. Describe the outcome you want and send the prompt.
+
+```text
+Find the cause of the Windows startup failure, fix it, and add a regression test.
+Do not discard any existing local changes.
+```
+
+The built-in engine needs no CLI installation. If the task needs Plan mode,
+sub-agents, Swarm, or the full CLI toolset, connect CLI Agent mode from the
+single guidance dialog.
 
 ## Start with one Kimi login
 
@@ -28,7 +45,7 @@ to maintain a separate account setup when you decide to use CLI Agent mode.
 
 ## Choose the experience that fits the task
 
-You do not need the most advanced agent workflow for every job. kimi-gui gives
+You do not need the most advanced agent workflow for every job. Kimi-GUI gives
 you a practical choice:
 
 | If you want to… | Choose |
@@ -60,6 +77,16 @@ working on the wrong branch.
 
 ![A new conversation with project and Git branch controls above the prompt](https://raw.githubusercontent.com/kaminion/kimi-gui/main/docs/media/release-0.6.0-new-chat.png)
 
+Useful first prompts include:
+
+```text
+Explain the data flow from this UI action to the backend.
+```
+
+```text
+Implement the requested change, run the relevant tests, and summarize every file changed.
+```
+
 ## Stay in control while Kimi is working
 
 An agent run does not have to be an all-or-nothing operation. The prompt remains
@@ -72,11 +99,17 @@ adjustment appears in the conversation as a visible queued item, giving you a
 chance to edit or delete it before Kimi picks it up. A separate stop control
 remains available when you really do want to end the run.
 
+For example, add a constraint as soon as you notice it:
+
+```text
+Keep the existing public API and include computers where no Kimi server is already running.
+```
+
 ![An active conversation with a queued work adjustment that can be edited or deleted](https://raw.githubusercontent.com/kaminion/kimi-gui/main/docs/media/release-0.6.1-queued-steer.png)
 
 ## Review the result without hunting through the repository
 
-When Kimi edits code or documentation, kimi-gui shows change cards directly in
+When Kimi edits code or documentation, Kimi-GUI shows change cards directly in
 the conversation. You can see which files changed, inspect added and deleted
 lines, and open the shared **Changes** panel for a focused review.
 
@@ -88,7 +121,7 @@ inspectors.
 
 ## A desktop workspace, not just a chat window
 
-kimi-gui brings the parts of an everyday coding-agent workflow together:
+Kimi-GUI brings the parts of an everyday coding-agent workflow together:
 
 - Built-in and CLI conversations in one searchable sidebar
 - Per-conversation model and thinking controls
@@ -105,7 +138,7 @@ visible, organized workspace for experienced Kimi CLI users.
 
 ## Who is it for?
 
-kimi-gui is a good fit if:
+Kimi-GUI is a good fit if:
 
 - You want to try Kimi Code without first learning a CLI workflow.
 - You already use Kimi CLI but want a visual home for sessions and changes.
@@ -115,7 +148,7 @@ kimi-gui is a good fit if:
 - You prefer native desktop controls for folders, approvals, updates, and
   settings.
 
-## Try kimi-gui
+## Try Kimi-GUI
 
 Requirements:
 

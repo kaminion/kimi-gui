@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <!-- Kimi Desktop icon: terminal prompt on black rounded square -->
+  <!-- Kimi-GUI icon: terminal prompt on black rounded square -->
   <rect x="0" y="0" width="1024" height="1024" rx="229" fill="#0a0a0c"/>
   <path d="M376 352 L552 512 L376 672" fill="none" stroke="#f5f5f7"
         stroke-width="88" stroke-linecap="round" stroke-linejoin="round"/>

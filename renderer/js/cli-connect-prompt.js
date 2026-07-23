@@ -1,6 +1,6 @@
 /* cli-connect-prompt.js
  *
- * Optional post-login prompt shown when kimi-gui starts with the built-in
+ * Optional post-login prompt shown when Kimi-GUI starts with the built-in
  * engine. It keeps CLI discovery, installation, connection, and the
  * "don't show again" preference in one dialog.
  */

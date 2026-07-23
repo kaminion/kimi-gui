@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * onboarding.js — first-run onboarding for Kimi Desktop (CONTRACT-V3, B3).
+ * onboarding.js — first-run onboarding for Kimi-GUI (CONTRACT-V3, B3).
  *
  * V3: the app works WITHOUT the Kimi Code CLI (default 'direct' engine), so
  * the gate is login-only and engine-independent:
