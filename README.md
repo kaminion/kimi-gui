@@ -1,4 +1,4 @@
-# kimi-gui [![Version](https://img.shields.io/badge/version-0.5.0-blue)](./package.json) [![Commit Activity](https://img.shields.io/github/commit-activity/m/kaminion/kimi-gui)](https://github.com/kaminion/kimi-gui/graphs/commit-activity) [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey)](#requirements)
+# kimi-gui [![Version](https://img.shields.io/badge/version-0.5.1-blue)](./package.json) [![Commit Activity](https://img.shields.io/github/commit-activity/m/kaminion/kimi-gui)](https://github.com/kaminion/kimi-gui/graphs/commit-activity) [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey)](#requirements)
 
 [Kimi Code](https://www.kimi.com/code/) | [GitHub](https://github.com/kaminion/kimi-gui) | [한국어](./README.ko.md)
 

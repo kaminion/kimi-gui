@@ -64,7 +64,11 @@ class KimiClient extends EventEmitter {
    */
   static async launch({ kimiPath = 'kimi', port = 58900 } = {}) {
     const args = ['web', '--no-open', '--port', String(port)];
-    const child = spawn(kimiPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(kimiPath, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+      env: process.env,
+    });
 
     const banner = await new Promise((resolve, reject) => {
       let settled = false;

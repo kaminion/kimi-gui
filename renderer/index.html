@@ -167,8 +167,8 @@
   <!-- Settings modal mount point (R4 owns behavior). -->
   <div id="settings-root"></div>
   <div id="modal-root"></div>
-  <!-- Fatal boot error (CLI missing / server launch failed). Inline styles keep it
-       legible regardless of stylesheet state; design agent may restyle later. -->
+  <!-- Fatal boot error (only reached when neither engine can start). Inline
+       styles keep it legible regardless of stylesheet state. -->
   <div id="boot-error" style="display:none; position:fixed; inset:0; z-index:999;
        flex-direction:column; align-items:center; justify-content:center; gap:16px;
        padding:32px; text-align:center; background:var(--bg, #fff); color:var(--text, #1d1d1f);
@@ -177,7 +177,7 @@
     <p id="boot-error-message" style="font-size:13px; margin:0; max-width:420px;
        color:var(--text-secondary, #6e6e73); word-break:break-all;"></p>
     <p style="font-size:12px; margin:0; max-width:420px; color:var(--text-dim, #86868b);"
-       data-i18n="app.boot_error_hint">Make sure Kimi Code CLI is installed, then try again.</p>
+       data-i18n="app.boot_error_hint">Try again. If CLI agent mode is unavailable, Kimi switches to the built-in engine automatically.</p>
     <button id="boot-retry-btn" type="button" style="font-size:13px; padding:6px 16px;
       border:none; border-radius:6px; cursor:pointer;
       background:var(--accent, #007AFF); color:var(--accent-text, #fff);"

@@ -1,8 +1,9 @@
 # Kimi Desktop — Architecture Contract (binding)
 
-Desktop GUI wrapper around the locally installed **Kimi Code CLI** (`kimi`, v0.28.1+).
-The app spawns `kimi web --no-open` (local REST + WebSocket server) and renders its own
-Apple-HIG chat UI (Claude-Code-like transcript), session list, approvals, and usage view.
+Desktop GUI with a built-in direct engine and an optional **Kimi Code CLI** agent mode
+(`kimi`, v0.28.1+). In CLI mode the app spawns `kimi web --no-open` (local REST +
+WebSocket server); both engines render through the same Apple-HIG chat UI
+(Claude-Code-like transcript), session list, approvals, and usage view.
 Cross-platform: macOS + Windows. Plain JS (ES2022), Electron, **no bundler, no TypeScript**.
 
 ## File ownership (do NOT touch files you do not own)
@@ -163,6 +164,10 @@ app.js: boot (getState → listSessions → select most recent), global onEvent 
 
 - Single instance lock. Window: 1100x720 min 840x560, `titleBarStyle: 'hiddenInset'` + `vibrancy: 'sidebar'` (mac only),
   `backgroundColor` matches theme.
-- On ready: `KimiClient.launch()` (find kimi: env `KIMI_CLI_PATH` → `which/where kimi` → `~/.kimi-code/bin/kimi[.exe]`),
-  retry once on another port; surface fatal error page if CLI missing.
+- On ready in CLI mode: `KimiClient.launch()` (find kimi: env `KIMI_CLI_PATH` → `which/where kimi` →
+  `~/.kimi-code/bin/kimi[.exe]`) and retry once on another port. Renderer boot waits for this result.
+- Do not equate the launcher PID with server lifetime. Windows launchers may print the ready banner,
+  detach the HTTP daemon, and exit with code `0`; probe `/healthz` before treating an exit as failure.
+- If the CLI is missing or its daemon is unreachable, persist and start the built-in direct engine.
+  The fatal boot page is reserved for the unlikely case where neither engine is available.
 - `before-quit`: client.shutdown(). All server stdout → `console` (prefix `[kimi-server]`).

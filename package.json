@@ -1,9 +1,9 @@
 {
   "name": "kimi-gui",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "author": "kaminion",
-  "description": "Desktop GUI wrapper around the Kimi Code CLI (kimi web)",
+  "description": "Desktop GUI for Kimi Code with built-in and CLI engines",
   "repository": {
     "type": "git",
     "url": "https://github.com/kaminion/kimi-gui.git"

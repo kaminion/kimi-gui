@@ -397,6 +397,10 @@
     if (!msg || typeof msg !== 'object') return;
     switch (msg.type) {
       case 'status':
+        if (msg.engine === 'direct' || msg.engine === 'cli') {
+          App.state.engine = msg.engine;
+          refreshChatOptions(App.state.activeSessionId);
+        }
         setServerStatus(msg.ready, msg.error);
         if (msg.ready) App.refreshSessions(); // resync after reconnect
         break;

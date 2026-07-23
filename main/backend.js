@@ -97,6 +97,7 @@ const cli = {
 };
 let cliLaunchPromise = null;
 let isShuttingDown = false;
+let lastCliFallbackReason = null;
 // Launch generation counter. Every lifecycle transition (teardown, and thus
 // every new launch) bumps it; launches capture their generation and must
 // verify it is still current before assigning cli.client or reporting ready.
@@ -104,6 +105,8 @@ let isShuttingDown = false;
 let cliGen = 0;
 const CLI_LAUNCH_PORT = 58900; // KimiClient.launch's historical default
 const CLI_LAUNCH_ATTEMPTS = 2; // 2nd attempt uses a fresh port (base + 1)
+const CLI_EXIT_PROBE_DELAY_MS = 300;
+const CLI_HEALTH_TIMEOUT_MS = 2500;
 
 // direct engine state: sessionId -> { controller, turnId, contextLimit, approvals: Map<approvalId, resolve> }
 const activeTurns = new Map();
@@ -289,9 +292,13 @@ function engine() {
 
 function currentStatus() {
   if (currentEngine === 'cli') {
-    return { ready: cli.ready, ...(cli.error ? { error: cli.error } : {}) };
+    return { ready: cli.ready, engine: 'cli', ...(cli.error ? { error: cli.error } : {}) };
   }
-  return { ready: loadDirect() != null };
+  return {
+    ready: loadDirect() != null,
+    engine: 'direct',
+    ...(lastCliFallbackReason ? { fallbackReason: lastCliFallbackReason } : {}),
+  };
 }
 
 function pushStatus() {
@@ -323,6 +330,7 @@ async function setEngine(next) {
   const target = next === 'cli' ? 'cli' : 'direct';
   if (!initialized) throw new Error('backend is not initialized');
   if (target === currentEngine) return { engine: currentEngine };
+  lastCliFallbackReason = null; // explicit user switch supersedes an automatic fallback
   const previous = currentEngine;
   currentEngine = target;
   writeSettings({ engine: target });
@@ -467,15 +475,29 @@ async function doLaunchCli() {
     }
     if (!isCurrent()) return; // superseded while probing meta/auth
     if (child.exitCode !== null || child.signalCode !== null) {
-      // Died between assignment and ready — launch failure; the exit handler
-      // stays silent pre-ready and this attempt retries on a fresh port.
-      cli.client = null;
-      cli.child = null;
-      lastErr = new Error(`kimi server exited during startup (code ${child.exitCode ?? child.signalCode})`);
-      continue;
+      // Some Windows CLI launchers print the ready banner, detach the actual
+      // HTTP daemon, and then exit successfully. The launcher PID is not the
+      // server lifetime in that case: trust the HTTP health endpoint instead.
+      // eslint-disable-next-line no-await-in-loop
+      const detachedServerAlive = await isCliServerReachable(client);
+      if (detachedServerAlive) {
+        console.log('[backend] cli launcher exited after starting a healthy detached server');
+        cli.child = null;
+        client.child = null;
+      } else {
+        // Died between assignment and ready and no daemon answers — launch
+        // failure. The exit handler stays silent pre-ready; retry a fresh port.
+        cli.client = null;
+        cli.child = null;
+        client.child = null;
+        await client.shutdown().catch(() => { /* best-effort cleanup */ });
+        lastErr = new Error(`kimi server exited during startup (code ${child.exitCode ?? child.signalCode})`);
+        continue;
+      }
     }
     lifecycle.ready = true;
     cli.ready = true;
+    lastCliFallbackReason = null;
     pushStatus();
     return;
   }
@@ -502,6 +524,11 @@ function wireCliEvents(client, child, gen, lifecycle) {
     'status',
     safe(({ ready, error } = {}) => {
       if (gen !== cliGen || client !== cli.client) return; // superseded
+      // KimiClient observes the launcher PID too. Defer launcher-exit status
+      // to the child handler below, which probes the actual HTTP daemon before
+      // deciding whether the server is gone (important for Windows launchers).
+      const childExited = child && (child.exitCode !== null || child.signalCode !== null);
+      if (childExited && error) return;
       cli.ready = !!ready;
       cli.error = error ?? null;
       pushStatus();
@@ -510,18 +537,62 @@ function wireCliEvents(client, child, gen, lifecycle) {
   if (child) {
     child.once('exit', (code, signal) => {
       if (isShuttingDown || gen !== cliGen || client !== cli.client) return; // superseded
-      cli.ready = false;
-      cli.client = null;
-      cli.child = null;
       // Pre-ready exits are launch failures (the launch loop retries on a
       // fresh port); only a post-ready exit is a fatal status. Readiness comes
       // from this generation's own lifecycle flag — the dying daemon's final
       // status event clears cli.ready first and must not mask it.
       if (!lifecycle.ready) return;
-      cli.error = `kimi server exited unexpectedly (code ${code}, signal ${signal})`;
-      pushStatus();
+      void handleCliChildExit({ client, child, gen, code, signal });
     });
   }
+}
+
+async function isCliServerReachable(client) {
+  if (!client || typeof client.healthz !== 'function') return false;
+  let timer = null;
+  try {
+    await Promise.race([
+      client.healthz(),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('health check timed out')), CLI_HEALTH_TIMEOUT_MS);
+      }),
+    ]);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function handleCliChildExit({ client, child, gen, code, signal }) {
+  await new Promise((resolve) => setTimeout(resolve, CLI_EXIT_PROBE_DELAY_MS));
+  if (isShuttingDown || gen !== cliGen || client !== cli.client) return;
+
+  if (await isCliServerReachable(client)) {
+    // Windows launcher process ended, but the detached daemon it started is
+    // healthy. Keep using it and let client.shutdown() stop it via /shutdown.
+    console.log(`[backend] cli launcher exited (code ${code}, signal ${signal}); detached server is healthy`);
+    cli.child = null;
+    client.child = null;
+    cli.ready = true;
+    cli.error = null;
+    pushStatus();
+    return;
+  }
+
+  const reason = `kimi server exited unexpectedly (code ${code}, signal ${signal})`;
+  client.child = null;
+  if (await fallbackToDirect(reason)) return;
+
+  // Direct modules being unavailable is an installation-level failure. Keep
+  // the original CLI error in that unlikely case so the retry screen remains
+  // actionable instead of reporting a false-success fallback.
+  cli.ready = false;
+  cli.client = null;
+  cli.child = null;
+  cli.error = reason;
+  pushStatus();
 }
 
 async function shutdownCli() {
@@ -542,6 +613,24 @@ async function shutdownCli() {
   }
 }
 
+/**
+ * Recover from a missing/dead CLI daemon without trapping the app on its boot
+ * error screen. Direct mode can also read and continue legacy CLI sessions, so
+ * this preserves the user's history while removing the local-server dependency.
+ */
+async function fallbackToDirect(reason) {
+  if (currentEngine !== 'cli' || isShuttingDown || loadDirect() == null) return false;
+  const cleanReason = String(reason || 'CLI engine unavailable');
+  console.warn(`[backend] falling back to direct engine: ${cleanReason}`);
+  await shutdownCli();
+  if (isShuttingDown) return false;
+  currentEngine = 'direct';
+  lastCliFallbackReason = cleanReason;
+  writeSettings({ engine: 'direct' });
+  pushStatus();
+  return true;
+}
+
 function requireCli() {
   if (!cli.client) {
     throw new Error(cli.error || 'engine unavailable: kimi server is not running (cli engine not ready)');
@@ -554,6 +643,16 @@ function requireCli() {
 // ---------------------------------------------------------------------------
 
 async function getState() {
+  if (currentEngine === 'cli' && !cli.ready && !isShuttingDown) {
+    // Renderer boot can race the asynchronous CLI launch, especially on
+    // Windows. Wait for the launch result instead of showing a premature
+    // fatal screen. If it still cannot run, persist a direct-engine fallback
+    // so machines without a local server remain usable on future launches.
+    await ensureCliLaunched().catch(() => { /* cli.error records the reason */ });
+    if (currentEngine === 'cli' && !cli.ready) {
+      await fallbackToDirect(cli.error || 'Kimi Code CLI server failed to start');
+    }
+  }
   const [cliInstalled, loggedIn] = await Promise.all([isCliInstalled(), Promise.resolve(isLoggedIn())]);
   return {
     ...currentStatus(),

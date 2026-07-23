@@ -215,16 +215,30 @@
     return lsGet(LS_DEFAULT_SWARM) === '1';
   }
 
+  function swarmAvailable() {
+    // Preload capabilities are captured before renderer boot. An automatic
+    // CLI -> direct fallback can therefore change the live engine without a
+    // reload, so also consult App.state instead of trusting the API shape.
+    return (
+      window.App?.state?.engine === 'cli' &&
+      typeof window.kimi?.setSessionSwarm === 'function'
+    );
+  }
+
   function updateSwarm(sid) {
     if (!swarmBtn || swarmBtn.hidden) return;
     if (!swarmBtn.textContent.trim()) swarmBtn.textContent = T('options.swarm.label', '스웜');
     // v4: engine without swarm (direct) — inert pill, explanatory title.
-    if (typeof window.kimi?.setSessionSwarm !== 'function') {
+    if (!swarmAvailable()) {
+      swarmBtn.classList.add('disabled');
       swarmBtn.classList.remove('on');
+      swarmBtn.setAttribute('aria-disabled', 'true');
       swarmBtn.setAttribute('aria-pressed', 'false');
       swarmBtn.title = T('options.swarm.unavailable', '스웜은 CLI 에이전트 모드에서 사용할 수 있습니다');
       return;
     }
+    swarmBtn.classList.remove('disabled');
+    swarmBtn.removeAttribute('aria-disabled');
     const on = swarmEnabled(sid);
     swarmBtn.classList.toggle('on', on);
     swarmBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
@@ -233,7 +247,7 @@
 
   async function toggleSwarm() {
     const sid = activeSessionId();
-    if (!sid) return;
+    if (!sid || !swarmAvailable()) return;
     const next = !swarmEnabled(sid);
     lsSet(LS_SWARM + sid, next ? '1' : '0'); // optimistic
     updateSwarm(sid);
@@ -310,7 +324,7 @@
       // v4: the pill renders in both engines — inert when the preload omits
       // setSessionSwarm (direct engine), fully wired when available (cli).
       swarmBtn.hidden = false;
-      if (typeof window.kimi?.setSessionSwarm !== 'function') {
+      if (!swarmAvailable()) {
         swarmBtn.classList.add('disabled');
         swarmBtn.setAttribute('aria-disabled', 'true');
         swarmBtn.setAttribute('aria-pressed', 'false');

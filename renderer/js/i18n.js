@@ -24,7 +24,7 @@
    * English: concise Apple-style UI copy. */
   const TABLE = {
     ko: {
-      'app.boot_error_hint': 'Kimi Code CLI가 설치되어 있는지 확인한 뒤 다시 시도하세요.',
+      'app.boot_error_hint': '다시 시도하세요. CLI 에이전트 모드를 사용할 수 없으면 내장 엔진으로 자동 전환됩니다.',
       'app.boot_error_title': 'Kimi를 시작할 수 없습니다',
       'app.boot_retry': '다시 시도',
       'app.error.cli_or_login': 'Kimi Code CLI를 찾을 수 없거나 로그인이 필요합니다.',
@@ -299,7 +299,7 @@
       'usage.window_5h_title': '5시간 단위 요청 속도 제한',
     },
     en: {
-      'app.boot_error_hint': 'Make sure Kimi Code CLI is installed, then try again.',
+      'app.boot_error_hint': 'Try again. If CLI agent mode is unavailable, Kimi switches to the built-in engine automatically.',
       'app.boot_error_title': 'Kimi couldn’t start',
       'app.boot_retry': 'Try again',
       'app.error.cli_or_login': 'Kimi Code CLI was not found, or login is required.',
