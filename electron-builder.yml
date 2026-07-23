@@ -7,6 +7,11 @@ productName: "kimi-gui"
 directories:
   output: dist
 
+publish:
+  - provider: github
+    owner: kaminion
+    repo: kimi-gui
+
 # Pack only runtime files; docs/ (incl. docs/ref ground-truth specs) stays out of the bundle.
 files:
   - package.json
@@ -45,10 +50,13 @@ win:
     - nsis
     - portable
   icon: assets/icon.png # electron-builder auto-generates .ico (use >=256x256 png)
-  artifactName: ${productName}-${version}-win-${arch}.${ext}
 
 nsis:
+  artifactName: ${productName}-${version}-win-${arch}-setup.${ext}
   oneClick: false # assisted installer with wizard pages
   perMachine: false # per-user install, no admin rights needed
   allowToChangeInstallationDirectory: true
   shortcutName: Kimi
+
+portable:
+  artifactName: ${productName}-${version}-win-${arch}-portable.${ext}

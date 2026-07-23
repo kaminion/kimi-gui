@@ -2,15 +2,13 @@
   "name": "kimi-gui",
   "version": "0.4.0",
   "private": true,
+  "author": "kaminion",
   "description": "Desktop GUI wrapper around the Kimi Code CLI (kimi web)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kaminion/kimi-gui.git"
+  },
   "main": "main/main.js",
-  "publish": [
-    {
-      "provider": "github",
-      "owner": "kaminion",
-      "repo": "kimi-gui"
-    }
-  ],
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder",
