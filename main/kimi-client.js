@@ -17,11 +17,11 @@
 const { EventEmitter } = require('node:events');
 const { spawn } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
+const { STEER_EDIT_WINDOW_MS } = require('./steer-queue');
 
 const API = '/api/v1';
 const BANNER_RE = /(https?:\/\/[\w.-]+):(\d+)\/#token=([^\s]+)/;
 const REDACTED = '<redacted>';
-const STEER_EDIT_WINDOW_MS = 4000;
 
 /** Error raised for daemon responses with code != 0 or HTTP failures. */
 class KimiApiError extends Error {

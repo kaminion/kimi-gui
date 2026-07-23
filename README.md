@@ -179,12 +179,19 @@ The project uses CommonJS in the Electron main process and plain browser scripts
 npm install
 npm start
 
+# Run state/protocol regression tests
+npm test
+
+# Syntax-check every shipped JavaScript file, then run the tests
+npm run check
+
 # Build platform installers
 npm run dist
-
-# Syntax-check an edited main-process file
-node --check main/backend.js
 ```
+
+The regression suite uses Node's built-in test runner and has no extra test
+framework dependency. Keep timing, cancellation, and cross-engine state
+transitions covered there before changing turn orchestration.
 
 ## Known Limitations
 

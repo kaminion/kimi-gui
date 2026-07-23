@@ -324,6 +324,7 @@
   }
 
   function filesChangedText(count) {
+    if (count === 1) return T('changes.file_changed', '파일 1개 변경됨');
     return T('changes.files_changed', '파일 N개 변경됨').replace('N', count);
   }
 

@@ -6,19 +6,30 @@ WebSocket server); both engines render through the same Apple-HIG chat UI
 (Claude-Code-like transcript), session list, approvals, and usage view.
 Cross-platform: macOS + Windows. Plain JS (ES2022), Electron, **no bundler, no TypeScript**.
 
-## File ownership (do NOT touch files you do not own)
+## Module boundaries
 
 ```
-package.json, .gitignore, vendor/           -> scaffold agent
-main/main.js, main/server-manager.js        -> scaffold agent
-main/ipc.js, main/preload.js                -> scaffold agent
-main/kimi-client.js, docs/protocol.md       -> protocol agent
-main/quota.js, docs/quota.md                -> quota agent
-renderer/styles/*.css, assets/, docs/design.md -> design agent
-renderer/js/chat.js, renderer/js/markdown.js, renderer/js/approvals.js -> chat agent
-renderer/index.html, renderer/js/app.js, renderer/js/sidebar.js, renderer/js/usage.js -> shell agent
-electron-builder.yml, README.md             -> packaging agent
+main/main.js                  Electron lifecycle and BrowserWindow policy
+main/ipc.js + main/preload.js Narrow, allow-listed renderer bridge
+main/backend.js               Engine-neutral session and turn orchestration
+main/direct-*.js              Built-in engine transport and local persistence
+main/kimi-client.js           Kimi CLI REST/WebSocket client
+main/steer-queue.js           Shared edit-window policy and direct steer queue
+main/auth.js + main/quota.js  Credentials, sign-in, and account quota
+renderer/js/app.js            Renderer store and cross-view coordination
+renderer/js/chat.js           Transcript, streaming, and composer behavior
+renderer/js/panel.js          Single tabbed right-side inspector
+renderer/js/*.js              Feature modules exposed through window globals
+renderer/styles/*.css         Shared tokens, layout, and component styles
+test/*.test.js                Main-process state and protocol regressions
 ```
+
+`main/backend.js` is the only session/chat dependency of `main/ipc.js`.
+Renderer modules never import Node APIs and communicate only through
+`window.kimi`, which `main/preload.js` publishes with `contextBridge`.
+Time-sensitive steer state belongs in `main/steer-queue.js` or
+`main/kimi-client.js`; orchestration code consumes those APIs rather than
+mutating queue records directly.
 
 ## Backend facts (verified live against kimi 0.28.1)
 
@@ -122,8 +133,10 @@ IPC: `ipcMain.handle` for request/response channels `kimi:<name>`; push via `web
     <main id="main">
       <section id="chat-view">
         <header id="chat-header">
-          <span id="chat-title"></span><span id="model-label"></span>
-          <span id="context-meter"></span><button id="abort-btn" hidden></button>
+          <div id="chat-title-group">
+            <span id="chat-section-label"></span><span id="chat-title"></span>
+          </div>
+          <span id="model-label"></span><button id="panel-toggle-btn"></button>
         </header>
         <div id="transcript"></div>
         <div id="composer-wrap">
@@ -151,6 +164,11 @@ IPC: `ipcMain.handle` for request/response channels `kimi:<name>`; push via `web
         <div id="session-usage"></div>
       </section>
     </main>
+    <aside id="panel" hidden>
+      <div id="panel-tabs" role="tablist"></div>
+      <div id="panel-work" role="tabpanel"></div>
+      <div id="panel-changes" role="tabpanel" hidden></div>
+    </aside>
   </div>
   <div id="modal-root"></div>               <!-- approvals/questions: .modal-backdrop > .modal -->
 </body>
@@ -168,7 +186,7 @@ IPC: `ipcMain.handle` for request/response channels `kimi:<name>`; push via `web
   highlighted, with a fixed `.code-header` toolbar above the scrollable code surface. The
   language label stays left-aligned and the copy action stays in the top-right corner.
 
-## Styling (design agent owns all CSS; these tokens are fixed)
+## Styling
 
 CSS custom props on `:root` (light) + `@media (prefers-color-scheme: dark)` overrides:
 `--bg, --bg-secondary, --sidebar-bg, --text, --text-secondary, --text-dim, --accent,
@@ -176,7 +194,7 @@ CSS custom props on `:root` (light) + `@media (prefers-color-scheme: dark)` over
 --radius-s:6px, --font-ui (-apple-system stack), --font-mono (SF Mono stack)`.
 Apple HIG: 13px base UI font, 8pt spacing grid, sidebar translucent (rgba, backdrop-filter blur),
 accent `#007AFF` light / `#0A84FF` dark, system-gray palette, subtle 0.5px borders, no heavy shadows.
-UI copy language: **Korean**.
+UI copy language: English by default with a complete Korean locale.
 
 ## App state / wiring (app.js owns the store; other modules read via `window.App`)
 

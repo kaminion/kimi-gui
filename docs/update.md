@@ -50,7 +50,7 @@ CONTRACT-V2 §Auto-update를 따른다.
   패키징 시 `app-update.yml` 생성과 `--publish` 업로드에 사용된다.
 - ⚠️ 주의: `package.json`에 `build` 키를 추가하면 `electron-builder.yml`이 **통째로
   무시**되므로 절대 추가하지 않는다. 명시적 설정이 필요하면 `electron-builder.yml`에
-  `publish:` 섹션을 추가한다(해당 파일 소유자: packaging agent).
+  `publish:` 섹션을 추가한다.
 - `package.json`의 `repository`와 Git remote도 같은 저장소를 가리켜야 한다.
 
 ### 릴리스 절차
