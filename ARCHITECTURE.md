@@ -204,6 +204,10 @@ app.js: boot (getState → listSessions → select most recent), global onEvent 
 
 ## Process/lifecycle (main.js)
 
+- Branding is a cross-file contract: `main/branding.js` owns the runtime name
+  and AppUserModelID; `package.json`, `electron-builder.yml`, and the renderer
+  title must match it. Windows additionally fixes `executableName`, shortcut
+  name, and uninstall display name to `Kimi-GUI`.
 - Single instance lock. Window: 1100x720 min 840x560, `titleBarStyle: 'hiddenInset'` + `vibrancy: 'sidebar'` (mac only),
   `backgroundColor` matches theme.
 - On ready in CLI mode: `KimiClient.launch()` (find kimi: env `KIMI_CLI_PATH` → `which/where kimi` →

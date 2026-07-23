@@ -20,9 +20,13 @@
 
 const { app, BrowserWindow, Menu, nativeImage } = require('electron');
 const path = require('node:path');
+const { APP_NAME, APP_ID } = require('./branding');
 
-// Brand: menu bar / Dock label in dev; packaged builds use productName + icns/ico.
-app.setName('Kimi-GUI');
+// Brand every runtime surface before Electron becomes ready. On Windows the
+// explicit AppUserModelID also keeps taskbar grouping and notifications tied
+// to the Kimi-GUI installer identity instead of Electron/package fallbacks.
+app.setName(APP_NAME);
+if (process.platform === 'win32') app.setAppUserModelId(APP_ID);
 const APP_ICON = path.join(__dirname, '..', 'assets', 'icon.png');
 
 const backend = require('./backend');
@@ -42,6 +46,7 @@ function broadcast(payload) {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
+    title: APP_NAME,
     width: 1100,
     height: 720,
     minWidth: 840,

@@ -1,6 +1,6 @@
 # Kimi-GUI
 
-![version](https://img.shields.io/badge/version-0.6.1-blue)
+![version](https://img.shields.io/badge/version-0.6.2-blue)
 ![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey)
 ![Electron](https://img.shields.io/badge/Electron-43-47848F?logo=electron&logoColor=white)
 ![made with](https://img.shields.io/badge/made%20with-vanilla%20JS%20%28no%20bundler%29-yellow)

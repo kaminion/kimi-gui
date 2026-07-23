@@ -46,6 +46,9 @@ dmg:
       path: /Applications
 
 win:
+  # Keep the installed/portable process name aligned with the product name.
+  # Do not rely on the npm-safe package name (`kimi-gui`) as a fallback.
+  executableName: Kimi-GUI
   target:
     - nsis
     - portable
@@ -57,6 +60,7 @@ nsis:
   perMachine: false # per-user install, no admin rights needed
   allowToChangeInstallationDirectory: true
   shortcutName: Kimi-GUI
+  uninstallDisplayName: Kimi-GUI
 
 portable:
   artifactName: ${productName}-${version}-win-${arch}-portable.${ext}

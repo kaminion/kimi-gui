@@ -1,6 +1,7 @@
 {
   "name": "kimi-gui",
-  "version": "0.6.1",
+  "productName": "Kimi-GUI",
+  "version": "0.6.2",
   "private": true,
   "author": "kaminion",
   "description": "Kimi-GUI desktop interface with built-in and Kimi CLI engines",
