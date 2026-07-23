@@ -5,7 +5,7 @@
 > [!IMPORTANT]
 > **kimi-gui is an independent community project, not an official Moonshot AI product.** It uses Kimi Code APIs and the same local credentials as the official Kimi Code CLI.
 
-kimi-gui is a desktop interface for [Kimi Code](https://www.kimi.com/code/). It brings conversations, model and thinking controls, agent activity, search, and usage visibility into a focused Electron app—without requiring a terminal.
+kimi-gui is a desktop interface for [Kimi Code](https://www.kimi.com/code/). Sign in with your Kimi account, then use conversations, model and thinking controls, agent activity, search, and usage visibility in a focused Electron app—without requiring a terminal.
 
 ## Getting Started
 
@@ -16,6 +16,14 @@ kimi-gui is a desktop interface for [Kimi Code](https://www.kimi.com/code/). It 
 - A Kimi membership
 - Internet access for sign-in and model responses
 
+### Sign in and start
+
+Launch kimi-gui, select **Log in**, and complete Kimi's verification in your browser. That's it—the default built-in engine works without installing or configuring the Kimi Code CLI.
+
+![kimi-gui first-launch screen with a simple Log in to Kimi prompt](./docs/media/kimi-login.png)
+
+Your credentials are stored under `~/.kimi-code/credentials` and can be shared with Kimi Code CLI, so one Kimi sign-in works across both experiences.
+
 ### Run from source
 
 ```sh
@@ -24,8 +32,6 @@ cd kimi-gui
 npm install
 npm start
 ```
-
-On first launch, the app walks you through Kimi's browser device sign-in. Credentials are stored under `~/.kimi-code/credentials` and can be shared with Kimi Code CLI.
 
 To build a local installer:
 
