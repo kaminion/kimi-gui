@@ -47,16 +47,22 @@ macOS builds produce DMG and ZIP artifacts. Windows builds produce an NSIS insta
 
 Start a conversation, watch thinking and answer tokens stream in, inspect agent state, and review token usage without leaving the app.
 
-![kimi-gui demo showing a new conversation, streamed Kimi response, agent activity, and usage](./docs/media/demo.gif)
+The demo starts with one-time Kimi sign-in, confirms the shared account and both engine choices, then follows a real built-in response into Agent activity and Usage.
 
-### Built-in engine and CLI agent mode
+![kimi-gui demo showing Kimi sign-in, both engine choices, a streamed response, agent activity, and usage](./docs/media/demo.gif)
+
+### Kimi Code, `kimi web`, and kimi-gui
+
+[Kimi Code](https://www.kimi.com/code/) is the underlying coding service. `kimi web` is an official Kimi Code CLI command that exposes the CLI runtime as a local REST and WebSocket service. kimi-gui is an independent Electron desktop client that offers two ways to use them: connect directly to the Kimi Code API, or manage `kimi web` for the full CLI agent workflow.
 
 Switch engines from Settings. The app restarts into the selected mode and keeps both kinds of sessions visible.
 
 | | Built-in engine (default) | CLI agent mode |
 | --- | --- | --- |
-| Runtime | Runs directly inside kimi-gui | Uses the official Kimi Code CLI |
-| API | Anthropic-compatible Kimi Code endpoint | Local `kimi web` service |
+| Runtime | Runs directly inside kimi-gui | Official Kimi Code CLI, launched and managed by the app |
+| Dependency | No CLI installation required | Kimi Code CLI installed locally |
+| Transport | Direct Kimi Code API connection | Local REST + WebSocket through `kimi web` |
+| Sign-in | One Kimi login, shared with the CLI | The same shared Kimi credentials |
 | Tools | Bash, Read, Write, Edit, Grep, and Glob | Full CLI agent toolset |
 | Agent features | Single-agent turns with approvals | Plan mode, sub-agents, and swarm |
 | Thinking | Off, low, high, or max | Per-session CLI configuration |
@@ -91,7 +97,7 @@ quota windows, and current-session token counts.
 
 ## Architecture
 
-The Electron main process exposes a narrow IPC bridge to a sandboxed renderer. `main/backend.js` is the engine facade: it routes sessions and prompts to either the built-in direct client or Kimi Code CLI while keeping the renderer engine-agnostic.
+The Electron main process exposes a narrow IPC bridge to a sandboxed renderer. `main/backend.js` is the engine facade: it routes sessions and prompts either to the built-in direct API client or to the official CLI through a local `kimi web` service, while keeping the renderer engine-agnostic.
 
 ```text
 main/       Electron lifecycle, engines, auth, sessions, IPC, updates
