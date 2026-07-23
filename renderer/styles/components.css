@@ -1574,3 +1574,105 @@
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
 }
+
+/* ==========================================================================
+   Tool display v6 — Claude-Code-style tool rows. The row markup is
+   <details class="msg-tool running|done|error"> with .msg-tool-header
+   (summary), .tool-status, .msg-tool-chevron, .msg-tool-name,
+   .msg-tool-summary, and a formatted .msg-tool-body (labels, command line,
+   path, diff-ish edit blocks, trimmed output). Additive only: these rules
+   target the classes chat.js actually emits (the older .tool-name/
+   .tool-summary/.expanded hooks above are kept untouched).
+   ========================================================================== */
+
+/* Hide the native disclosure triangle; our ▸ chevron marks state instead. */
+.msg-tool-header {
+  list-style: none;
+}
+
+.msg-tool-header::-webkit-details-marker {
+  display: none;
+}
+
+.msg-tool-chevron {
+  flex: none;
+  font-size: 9px;
+  line-height: 1;
+  color: var(--text-dim);
+  transition: transform 0.15s var(--ease-out);
+}
+
+.msg-tool[open] .msg-tool-chevron {
+  transform: rotate(90deg);
+}
+
+.msg-tool-name {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.msg-tool-summary {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The base .msg-tool-body rule above is display:none; opening the details
+   reveals it (the legacy .expanded hook is not used by chat.js). */
+.msg-tool[open] .msg-tool-body {
+  display: block;
+}
+
+.msg-tool-label {
+  margin: var(--space-2) 0 var(--space-1);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.msg-tool-label:first-child {
+  margin-top: 0;
+}
+
+.msg-tool-cmd,
+.msg-tool-path {
+  margin: 0 0 var(--space-1);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.msg-tool-output {
+  margin: 0 0 var(--space-1);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.msg-tool-output.is-error {
+  color: var(--danger);
+}
+
+.msg-tool-diff-old,
+.msg-tool-diff-new {
+  margin: 0 0 var(--space-1);
+  padding-left: var(--space-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.msg-tool-diff-old {
+  border-left: 2px solid var(--danger);
+  color: var(--danger);
+}
+
+.msg-tool-diff-new {
+  border-left: 2px solid var(--success);
+  color: var(--success);
+}

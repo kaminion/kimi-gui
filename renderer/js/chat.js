@@ -33,14 +33,22 @@
  *   composer + send button and swaps the placeholder/title for the
  *   chat.foreign_readonly notice. The backend also rejects such sends with an
  *   {type:'error', message} event, rendered here as a chat system note.
+ *
+ * v6 (tool display): tool rows present Claude-Code-style — header is
+ * `ToolName  concise-target` (basename for file tools, word-boundary
+ * truncation at 80 chars, full target as hover tooltip), the expanded body is
+ * formatted blocks (command line, path, diff-ish edit excerpt, labeled output
+ * trimmed to ~4KB) instead of a raw JSON dump. A text part that is entirely
+ * one raw tool-invocation JSON blob (leaked function call) is converted to a
+ * tool row rather than rendered inline.
  */
 (function () {
   'use strict';
 
   const SCROLL_PIN_PX = 80;      // user is "at bottom" within this distance
   const COMPOSER_MAX_PX = 200;   // auto-grow ceiling
-  const SUMMARY_MAX = 80;        // one-line tool input summary
-  const TOOL_BODY_MAX = 4000;    // collapsed tool body truncation
+  const SUMMARY_MAX = 80;        // one-line tool target in the row header
+  const TOOL_BODY_MAX = 4000;    // per-block truncation (~4KB) in the tool body
   const RELOAD_DEBOUNCE_MS = 300;
   const HIGHLIGHT_FLASH_MS = 1200;  // keep in sync with search-highlight-flash in search.css
 
@@ -101,9 +109,20 @@
 
   function oneLine(s) { return String(s).replace(/\s+/g, ' ').trim(); }
 
-  function trunc(s, max) {
-    s = String(s);
-    return s.length > max ? s.slice(0, max - 1) + '…' : s;
+  function basename(p) {
+    const parts = String(p).split(/[\\/]/).filter(Boolean);
+    return parts.length ? parts[parts.length - 1] : String(p);
+  }
+
+  // Header truncation: cut at a word boundary when the cut would not throw
+  // away most of the string (keeps long commands/paths readable).
+  function truncWord(s, max) {
+    s = oneLine(s);
+    if (s.length <= max) return s;
+    let cut = s.slice(0, max - 1);
+    const lastSpace = cut.lastIndexOf(' ');
+    if (lastSpace > max * 0.5) cut = cut.slice(0, lastSpace);
+    return cut.replace(/[\s.,;:!?—·-]+$/, '') + '…';
   }
 
   function esc(s) {
@@ -247,49 +266,143 @@
     return m.content.filter((p) => p.type === 'text').map((p) => p.text).join('\n').trim();
   }
 
-  function toolSummary(name, input) {
-    if (input == null) return '';
-    if (typeof input === 'string') return trunc(oneLine(input), SUMMARY_MAX);
-    if (typeof input !== 'object') return trunc(oneLine(String(input)), SUMMARY_MAX);
-    const pick = (k) => (typeof input[k] === 'string' && input[k] ? input[k] : null);
-    let s = null;
-    switch (name) {
-      case 'Read': case 'Edit': case 'Write': case 'NotebookEdit':
-        s = pick('file_path'); break;
-      case 'ReadMediaFile': s = pick('path'); break;
-      case 'Glob': s = pick('pattern'); break;
-      case 'Grep':
-        s = pick('pattern');
-        if (s && input.path) s += '  ·  ' + String(input.path);
-        break;
-      case 'Bash': s = pick('command'); break;
-      case 'WebFetch': case 'FetchURL': s = pick('url'); break;
-      case 'WebSearch': s = pick('query'); break;
-      case 'Task': case 'Agent': s = pick('description') || pick('prompt'); break;
-      case 'Skill': s = pick('skill'); break;
-      case 'TodoList': s = ''; break;
-      default: s = null;
+  // Fallback header target for unknown tools: the first scalar (string /
+  // number / boolean) argument value, else ''. Keeps raw JSON out of the row
+  // header (the body still shows the full input for debugging).
+  function firstScalar(input) {
+    for (const k of Object.keys(input)) {
+      const v = input[k];
+      if (typeof v === 'string' && v) return v;
+      if (typeof v === 'number' || typeof v === 'boolean') return String(v);
     }
-    if (s == null) {
-      try { s = JSON.stringify(input); } catch { s = String(input); }
-    }
-    return trunc(oneLine(s || ''), SUMMARY_MAX);
+    return '';
   }
 
-  function toolBodyText(part, result) {
-    let out = '';
-    if (part.input !== undefined) {
-      try { out = typeof part.input === 'string' ? part.input : JSON.stringify(part.input, null, 2); }
-      catch { out = String(part.input); }
+  // One-line, human-readable target for a tool call — the concise form shown
+  // next to the tool name in the row header (Claude Code style: `Read x.js`,
+  // `Bash ls -la`). File tools collapse to the basename; the full path shows
+  // in the expanded body and in the header's hover tooltip. Returns null for
+  // unrecognized tools so callers can fall back (header: first scalar arg,
+  // body: pretty-printed input).
+  function toolTarget(name, input) {
+    if (input == null) return '';
+    if (typeof input === 'string') return oneLine(input);
+    if (typeof input !== 'object') return oneLine(String(input));
+    const pick = (...keys) => {
+      for (const k of keys) if (typeof input[k] === 'string' && input[k]) return input[k];
+      return null;
+    };
+    switch (name) {
+      case 'Read': case 'Edit': case 'Write': case 'NotebookEdit': case 'ReadMediaFile': {
+        const p = pick('file_path', 'path');
+        return p ? basename(p) : firstScalar(input);
+      }
+      case 'Bash': return pick('command') || firstScalar(input);
+      case 'Grep': {
+        const pat = pick('pattern');
+        const p = pick('path');
+        const s = pat ? '"' + oneLine(pat) + '"' : '';
+        return s && p ? s + ' — ' + p : (s || p || firstScalar(input));
+      }
+      case 'Glob': return pick('pattern') || firstScalar(input);
+      case 'WebFetch': case 'FetchURL': return pick('url') || firstScalar(input);
+      case 'WebSearch': return pick('query') || firstScalar(input);
+      case 'Task': case 'Agent': return pick('description', 'prompt') || firstScalar(input);
+      case 'AgentSwarm': return pick('description', 'prompt_template') || firstScalar(input);
+      case 'Skill': return pick('skill') || firstScalar(input);
+      case 'TaskOutput': case 'TaskStop': return pick('task_id') || firstScalar(input);
+      case 'TodoList': return '';
+      default: return null;
     }
-    if (result) {
-      let o = result.output;
-      if (o == null) o = '';
-      if (typeof o !== 'string') { try { o = JSON.stringify(o, null, 2); } catch { o = String(o); } }
-      out += (out ? '\n\n' : '') + o;
+  }
+
+  // Header summary: { short } renders next to the tool name, { full } is the
+  // untruncated one-liner used as the hover tooltip. Unknown tools fall back
+  // to their first scalar argument.
+  function toolSummary(name, input) {
+    let full = toolTarget(name, input);
+    if (full == null) full = (input && typeof input === 'object') ? firstScalar(input) : '';
+    return { short: truncWord(full, SUMMARY_MAX), full };
+  }
+
+  // Trim a body block to ~4KB; a trailing notice marks the cut.
+  function bodyTrim(s) {
+    s = String(s);
+    if (s.length <= TOOL_BODY_MAX) return s;
+    return s.slice(0, TOOL_BODY_MAX) + '\n' + T('chat.tool.trimmed', '… (이하 생략)');
+  }
+
+  function resultText(result) {
+    if (!result) return '';
+    let o = result.output;
+    if (o == null) return '';
+    if (typeof o !== 'string') { try { o = JSON.stringify(o, null, 2); } catch { o = String(o); } }
+    return o;
+  }
+
+  function addLabel(body, key, fallback) {
+    body.append(el('div', 'msg-tool-label', T(key, fallback)));
+  }
+
+  function addPre(body, className, text) {
+    body.append(el('pre', className, bodyTrim(text)));
+  }
+
+  // Diff-ish excerpt: prefix every line with the given marker.
+  function diffLines(marker, text) {
+    return String(text).split('\n').map((l) => marker + l).join('\n');
+  }
+
+  // Expanded tool row body: formatted blocks (built with textContent only, so
+  // tool output can never inject markup), never a raw JSON dump for known
+  // tools. Unknown tools keep a pretty-printed input for debuggability.
+  function buildToolBody(part, result) {
+    const body = el('div', 'msg-tool-body');
+    const name = part.tool_name || '';
+    const input = (part.input && typeof part.input === 'object') ? part.input : null;
+    const out = resultText(result);
+    const path = input && ((typeof input.file_path === 'string' && input.file_path) ||
+      (typeof input.path === 'string' && input.path) || null);
+    let shown = false;
+
+    if (name === 'Bash' && input && typeof input.command === 'string' && input.command) {
+      addLabel(body, 'chat.tool.command', '명령');
+      body.append(el('div', 'msg-tool-cmd', '$ ' + input.command));
+      shown = true;
+    } else if (path) {
+      body.append(el('div', 'msg-tool-path', path));
+      shown = true;
+      if ((name === 'Write' || name === 'NotebookEdit') && typeof input.content === 'string' && input.content) {
+        addLabel(body, 'chat.tool.content', '내용');
+        addPre(body, 'msg-tool-output', input.content);
+      } else if (name === 'Edit') {
+        if (typeof input.old_string === 'string' && input.old_string) addPre(body, 'msg-tool-diff-old', diffLines('- ', input.old_string));
+        if (typeof input.new_string === 'string' && input.new_string) addPre(body, 'msg-tool-diff-new', diffLines('+ ', input.new_string));
+      }
+    } else if (input) {
+      const target = toolTarget(name, input);
+      if (target) {
+        // Known non-file tool (Grep/Glob/WebSearch/…): echo the header target.
+        body.append(el('div', 'msg-tool-path', target));
+        shown = true;
+      } else if (target == null) {
+        // Unknown tool: keep a readable pretty-print for debugging.
+        let pretty;
+        try { pretty = JSON.stringify(input, null, 2); } catch { pretty = String(part.input); }
+        if (pretty && pretty !== '{}') { addPre(body, 'msg-tool-output', pretty); shown = true; }
+      }
+    } else if (typeof part.input === 'string' && part.input) {
+      addPre(body, 'msg-tool-output', part.input);
+      shown = true;
     }
-    if (!out.trim()) out = T('chat.tool.no_content', '(내용 없음)');
-    return trunc(out, TOOL_BODY_MAX);
+
+    if (out.trim()) {
+      addLabel(body, 'chat.tool.output', '출력');
+      addPre(body, 'msg-tool-output' + (result.is_error ? ' is-error' : ''), out);
+      shown = true;
+    }
+    if (!shown) body.append(el('div', 'msg-tool-label', T('chat.tool.no_content', '(내용 없음)')));
+    return body;
   }
 
   function buildToolRow(part, result, streaming) {
@@ -297,14 +410,35 @@
     const row = el('details', 'msg-tool ' + state);
     const summary = document.createElement('summary');
     summary.className = 'msg-tool-header';
+    const { short, full } = toolSummary(part.tool_name, part.input);
     summary.append(
+      el('span', 'tool-status', ''),
       el('span', 'msg-tool-chevron', '▸'),
       el('span', 'msg-tool-name', part.tool_name || 'tool'),
-      el('span', 'msg-tool-summary', toolSummary(part.tool_name, part.input)),
+      el('span', 'msg-tool-summary', short),
     );
-    const body = el('pre', 'msg-tool-body', toolBodyText(part, result));
-    row.append(summary, body);
+    if (full) summary.title = full; // hover tooltip: untruncated target
+    row.append(summary, buildToolBody(part, result));
     return row;
+  }
+
+  // A text part that is entirely one raw tool-invocation JSON blob (leaked
+  // function call from a model without native tool calls) is converted to a
+  // proper tool row instead of rendering as inline JSON.
+  function parseRawToolCall(text) {
+    const s = String(text).trim();
+    if (s.length < 2 || s[0] !== '{' || s[s.length - 1] !== '}') return null;
+    let j;
+    try { j = JSON.parse(s); } catch { return null; }
+    if (!j || typeof j !== 'object' || typeof j.name !== 'string' || !j.name) return null;
+    const input = j.input ?? j.arguments ?? j.args;
+    const invocationType = j.type === 'tool_use' || j.type === 'tool_call' || j.type === 'function_call';
+    const ALLOWED = new Set(['type', 'name', 'input', 'arguments', 'args', 'id', 'tool_call_id']);
+    if (!invocationType &&
+        !(input != null && typeof input === 'object' && Object.keys(j).every((k) => ALLOWED.has(k)))) {
+      return null;
+    }
+    return { type: 'tool_use', tool_call_id: j.tool_call_id ?? j.id ?? '', tool_name: j.name, input };
   }
 
   function buildThinking(details) {
@@ -379,7 +513,16 @@
     };
     for (const p of m.content) {
       if (p.type === 'text') {
-        mdBuffer += (mdBuffer ? '\n' : '') + p.text;
+        // Leaked function call (a whole text part that is one invocation JSON
+        // blob) renders as a tool row, not as inline JSON.
+        const raw = parseRawToolCall(p.text);
+        if (raw) {
+          flushMd();
+          const result = raw.tool_call_id ? results.get(raw.tool_call_id) : undefined;
+          row.append(buildToolRow(raw, result, streaming && streamNodes.get(m.id)));
+        } else {
+          mdBuffer += (mdBuffer ? '\n' : '') + p.text;
+        }
       } else if (p.type === 'thinking') {
         flushMd();
         if (p.thinking && p.thinking.trim()) row.append(buildThinking(p.thinking));
