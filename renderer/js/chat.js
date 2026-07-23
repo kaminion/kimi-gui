@@ -54,6 +54,11 @@
  * skill_activation / task / background_task, or text starting with
  * '<system-reminder' / '<notification' / skill-wrapper blobs) are dropped
  * from the transcript entirely.
+ *
+ * v8 (file changes): Edit/Write/MultiEdit/NotebookEdit/apply_patch steps render
+ * as first-class, file-by-file diff cards in the assistant surface. They show
+ * live/done/error state, line counts, old/new gutters, compacted context, and
+ * preserve disclosure state while streaming results settle.
  */
 (function () {
   'use strict';
@@ -62,6 +67,7 @@
   const COMPOSER_MAX_PX = 200;   // auto-grow ceiling
   const SUMMARY_MAX = 80;        // one-line tool target in the row header
   const TOOL_BODY_MAX = 4000;    // per-block truncation (~4KB) in the tool body
+  const CHANGE_ROWS_MAX = 260;   // keep large file writes responsive in the transcript
   const RELOAD_DEBOUNCE_MS = 300;
   const HIGHLIGHT_FLASH_MS = 1200;  // keep in sync with search-highlight-flash in search.css
 
@@ -110,6 +116,7 @@
   let optimisticUser = null;            // { text, el } echoed locally until server confirms
   let busy = false;
   let readOnly = false;                 // foreign-engine session: composer locked, notice shown
+  let currentChangeSnapshot = { sessionId: null, fileCount: 0, additions: 0, deletions: 0, files: [] };
   let pinned = true;
   let reloadTimer = null;
   let highlightTimer = null;        // pending removal of a .search-highlight flash
@@ -329,9 +336,13 @@
       return null;
     };
     switch (name) {
-      case 'Read': case 'Edit': case 'Write': case 'NotebookEdit': case 'ReadMediaFile': {
+      case 'Read': case 'Edit': case 'Write': case 'MultiEdit': case 'NotebookEdit': case 'ReadMediaFile': {
         const p = pick('file_path', 'path');
         return p ? basename(p) : firstScalar(input);
+      }
+      case 'apply_patch': {
+        const paths = parseApplyPatch(input).map((change) => change.path);
+        return paths.length ? paths.map(basename).join(', ') : firstScalar(input);
       }
       case 'Bash': return pick('command') || firstScalar(input);
       case 'Grep': {
@@ -387,6 +398,406 @@
   // Diff-ish excerpt: prefix every line with the given marker.
   function diffLines(marker, text) {
     return String(text).split('\n').map((l) => marker + l).join('\n');
+  }
+
+  // ---- file-change presentation ---------------------------------------------
+  // Mutation tools are promoted out of the generic tool log into GPT-style
+  // change cards in the assistant surface. The renderer only uses tool input,
+  // so it works for both live events and persisted message history.
+  function toolKey(name) {
+    const parts = String(name || '').toLowerCase().split(/(?:__|[.:/])/);
+    return parts[parts.length - 1].replace(/-/g, '_');
+  }
+
+  function mutationKind(part) {
+    const key = toolKey(part && part.tool_name);
+    const aliases = {
+      edit: 'edit',
+      edit_file: 'edit',
+      write: 'write',
+      write_file: 'write',
+      multiedit: 'multiedit',
+      multi_edit: 'multiedit',
+      notebookedit: 'notebookedit',
+      notebook_edit: 'notebookedit',
+      applypatch: 'apply_patch',
+      apply_patch: 'apply_patch',
+    };
+    return aliases[key] || null;
+  }
+
+  function inputPath(input) {
+    if (!input || typeof input !== 'object') return '';
+    return input.file_path ?? input.filePath ?? input.path ?? input.notebook_path ?? input.notebookPath ?? '';
+  }
+
+  function contentLines(value) {
+    if (value == null || value === '') return [];
+    if (Array.isArray(value)) return value.flatMap((line) => contentLines(line));
+    return String(value).replace(/\r\n?/g, '\n').replace(/\n$/, '').split('\n');
+  }
+
+  // Line-level LCS keeps unchanged context readable for Edit/MultiEdit instead
+  // of painting the entire replacement red and green. Very large replacements
+  // take the linear fallback to avoid quadratic work on the UI thread.
+  function pairedDiffRows(oldValue, newValue) {
+    const before = contentLines(oldValue);
+    const after = contentLines(newValue);
+    if (!before.length) return after.map((text, i) => ({ type: 'add', text, oldNo: null, newNo: i + 1 }));
+    if (!after.length) return before.map((text, i) => ({ type: 'del', text, oldNo: i + 1, newNo: null }));
+
+    if (before.length * after.length > 40000) {
+      return [
+        ...before.map((text, i) => ({ type: 'del', text, oldNo: i + 1, newNo: null })),
+        ...after.map((text, i) => ({ type: 'add', text, oldNo: null, newNo: i + 1 })),
+      ];
+    }
+
+    const dp = Array.from({ length: before.length + 1 }, () => new Uint16Array(after.length + 1));
+    for (let i = before.length - 1; i >= 0; i--) {
+      for (let j = after.length - 1; j >= 0; j--) {
+        dp[i][j] = before[i] === after[j]
+          ? dp[i + 1][j + 1] + 1
+          : Math.max(dp[i + 1][j], dp[i][j + 1]);
+      }
+    }
+
+    const rows = [];
+    let i = 0;
+    let j = 0;
+    while (i < before.length || j < after.length) {
+      if (i < before.length && j < after.length && before[i] === after[j]) {
+        rows.push({ type: 'context', text: before[i], oldNo: i + 1, newNo: j + 1 });
+        i++;
+        j++;
+      } else if (j < after.length && (i >= before.length || dp[i][j + 1] > dp[i + 1][j])) {
+        rows.push({ type: 'add', text: after[j], oldNo: null, newNo: j + 1 });
+        j++;
+      } else {
+        rows.push({ type: 'del', text: before[i], oldNo: i + 1, newNo: null });
+        i++;
+      }
+    }
+    return rows;
+  }
+
+  function changeFromPair(path, oldValue, newValue, kind) {
+    const rows = pairedDiffRows(oldValue, newValue);
+    return {
+      path: String(path || T('chat.change.unknown_file', '이름 없는 파일')),
+      kind: kind || 'modified',
+      rows,
+      additions: rows.filter((r) => r.type === 'add').length,
+      deletions: rows.filter((r) => r.type === 'del').length,
+    };
+  }
+
+  function patchText(input) {
+    if (typeof input === 'string') return input;
+    if (!input || typeof input !== 'object') return '';
+    return input.patch ?? input.input ?? input.diff ?? '';
+  }
+
+  // Parses the custom *** Update File format used by apply_patch. Numeric
+  // unified-diff hunk headers are honored when present; anchor-only hunks keep
+  // the number gutter blank rather than inventing source locations.
+  function parseApplyPatch(input) {
+    const lines = String(patchText(input)).replace(/\r\n?/g, '\n').split('\n');
+    const changes = [];
+    let current = null;
+    let oldLine = null;
+    let newLine = null;
+
+    const finish = () => {
+      if (!current) return;
+      current.additions = current.rows.filter((r) => r.type === 'add').length;
+      current.deletions = current.rows.filter((r) => r.type === 'del').length;
+      changes.push(current);
+      current = null;
+    };
+
+    for (const line of lines) {
+      const file = line.match(/^\*\*\*\s+(Add|Update|Delete) File:\s*(.+?)\s*$/);
+      if (file) {
+        finish();
+        const kind = file[1] === 'Add' ? 'added' : file[1] === 'Delete' ? 'deleted' : 'modified';
+        current = { path: file[2], kind, rows: [], additions: 0, deletions: 0 };
+        oldLine = null;
+        newLine = null;
+        continue;
+      }
+      if (!current) continue;
+
+      const move = line.match(/^\*\*\*\s+Move to:\s*(.+?)\s*$/);
+      if (move) {
+        current.oldPath = current.path;
+        current.path = move[1];
+        current.kind = 'renamed';
+        continue;
+      }
+      if (/^\*\*\*\s+(?:End Patch|End of File)\s*$/.test(line)) {
+        if (/End Patch/.test(line)) finish();
+        continue;
+      }
+      if (line.startsWith('@@')) {
+        const range = line.match(/^@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/);
+        oldLine = range ? Number(range[1]) : null;
+        newLine = range ? Number(range[2]) : null;
+        current.rows.push({ type: 'hunk', text: line.replace(/^@@\s*|\s*@@.*$/g, '').trim() });
+        continue;
+      }
+
+      const marker = line[0];
+      if (marker !== '+' && marker !== '-' && marker !== ' ') continue;
+      const type = marker === '+' ? 'add' : marker === '-' ? 'del' : 'context';
+      current.rows.push({
+        type,
+        text: line.slice(1),
+        oldNo: type === 'add' ? null : oldLine,
+        newNo: type === 'del' ? null : newLine,
+      });
+      if (type !== 'add' && oldLine != null) oldLine++;
+      if (type !== 'del' && newLine != null) newLine++;
+    }
+    finish();
+    return changes;
+  }
+
+  function mutationChanges(part) {
+    const key = mutationKind(part);
+    if (!key) return [];
+    const input = part.input && typeof part.input === 'object' ? part.input : null;
+
+    if (key === 'apply_patch') return parseApplyPatch(part.input);
+    if (!input) return [];
+
+    const path = inputPath(input);
+    if (key === 'edit') {
+      return [changeFromPair(path, input.old_string ?? input.oldString ?? '', input.new_string ?? input.newString ?? '', 'modified')];
+    }
+    if (key === 'write') {
+      return [changeFromPair(path, '', input.content ?? input.text ?? '', 'modified')];
+    }
+    if (key === 'notebookedit') {
+      const before = input.old_source ?? input.oldSource ?? input.old_string ?? input.oldString ?? '';
+      const after = input.new_source ?? input.newSource ?? input.new_string ?? input.newString ??
+        input.content ?? input.source ?? '';
+      return [changeFromPair(path, before, after, 'modified')];
+    }
+    if (key === 'multiedit' && Array.isArray(input.edits)) {
+      const rows = [];
+      input.edits.forEach((edit, index) => {
+        if (index) rows.push({ type: 'hunk', text: '' });
+        rows.push(...pairedDiffRows(
+          edit.old_string ?? edit.oldString ?? '',
+          edit.new_string ?? edit.newString ?? '',
+        ));
+      });
+      return [{
+        path: String(path || T('chat.change.unknown_file', '이름 없는 파일')),
+        kind: 'modified',
+        rows,
+        additions: rows.filter((r) => r.type === 'add').length,
+        deletions: rows.filter((r) => r.type === 'del').length,
+      }];
+    }
+    return [];
+  }
+
+  function compactContextRows(rows) {
+    const result = [];
+    let i = 0;
+    while (i < rows.length) {
+      if (rows[i].type !== 'context') {
+        result.push(rows[i++]);
+        continue;
+      }
+      let end = i;
+      while (end < rows.length && rows[end].type === 'context') end++;
+      const run = rows.slice(i, end);
+      if (run.length > 8) {
+        result.push(...run.slice(0, 3), { type: 'fold', count: run.length - 6 }, ...run.slice(-3));
+      } else {
+        result.push(...run);
+      }
+      i = end;
+    }
+    return result;
+  }
+
+  function changeVerb(kind, state) {
+    if (state === 'running') return T('chat.change.editing', '수정 중');
+    if (state === 'error') return T('chat.change.failed', '수정 실패');
+    if (kind === 'added') return T('chat.change.created', '생성함');
+    if (kind === 'deleted') return T('chat.change.deleted', '삭제함');
+    if (kind === 'renamed') return T('chat.change.renamed', '이동함');
+    return T('chat.change.edited', '수정함');
+  }
+
+  function buildChangeLine(row) {
+    const line = el('div', 'msg-change-line ' + row.type);
+    if (row.type === 'fold') {
+      const label = row.more
+        ? T('chat.change.more_lines', 'N줄 더 있음').replace('N', row.count)
+        : T('chat.change.unchanged', '변경 없는 N줄').replace('N', row.count);
+      line.append(el('span', 'msg-change-fold', label));
+      return line;
+    }
+    if (row.type === 'hunk') {
+      line.append(el('span', 'msg-change-hunk', row.text || T('chat.change.next_hunk', '다음 변경')));
+      return line;
+    }
+    line.append(
+      el('span', 'msg-change-number', row.oldNo == null ? '' : row.oldNo),
+      el('span', 'msg-change-number', row.newNo == null ? '' : row.newNo),
+      el('span', 'msg-change-marker', row.type === 'add' ? '+' : row.type === 'del' ? '-' : ' '),
+      el('code', 'msg-change-code', row.text),
+    );
+    return line;
+  }
+
+  function buildChangeCard(change, result, streaming, index, total) {
+    const state = result ? (result.is_error ? 'error' : 'done') : (streaming ? 'running' : 'done');
+    const hasBody = change.rows.length > 0 || state === 'error';
+    const card = el(hasBody ? 'details' : 'div', 'msg-change ' + state + (hasBody ? '' : ' no-detail'));
+    card.dataset.changePath = change.path;
+    if (hasBody) card.open = total === 1 || index === 0;
+
+    const summary = document.createElement(hasBody ? 'summary' : 'div');
+    summary.className = 'msg-change-header';
+    summary.title = change.oldPath ? change.oldPath + ' → ' + change.path : change.path;
+    const path = el('span', 'msg-change-path', change.oldPath ? change.oldPath + ' → ' + change.path : change.path);
+    const stats = el('span', 'msg-change-stats');
+    if (change.additions) stats.append(el('span', 'msg-change-additions', '+' + change.additions));
+    if (change.deletions) stats.append(el('span', 'msg-change-deletions', '-' + change.deletions));
+    if (!change.additions && !change.deletions) {
+      stats.append(el('span', 'msg-change-neutral', T('chat.change.no_lines', '파일 변경')));
+    }
+    const headerItems = [
+      el('span', 'tool-status', ''),
+      el('span', 'msg-change-verb', changeVerb(change.kind, state)),
+      path,
+      stats,
+    ];
+    if (hasBody) headerItems.push(el('span', 'msg-change-chevron', '▸'));
+    summary.append(...headerItems);
+
+    card.append(summary);
+    if (hasBody) {
+      const body = el('div', 'msg-change-body');
+      if (change.rows.length) {
+        const diff = el('div', 'msg-change-diff');
+        diff.setAttribute('role', 'region');
+        diff.setAttribute('aria-label', T('chat.change.diff_aria', '파일 변경 내용') + ': ' + change.path);
+        const rows = compactContextRows(change.rows);
+        const visible = rows.slice(0, CHANGE_ROWS_MAX);
+        for (const row of visible) diff.append(buildChangeLine(row));
+        if (rows.length > visible.length) {
+          diff.append(buildChangeLine({ type: 'fold', count: rows.length - visible.length, more: true }));
+        }
+        body.append(diff);
+      }
+      if (state === 'error') {
+        const output = resultText(result).trim() || T('chat.change.failed_detail', '변경사항을 적용하지 못했습니다.');
+        body.append(el('pre', 'msg-change-error', bodyTrim(output)));
+      }
+      card.append(body);
+    }
+    return card;
+  }
+
+  function buildChangeSet(part, result, streaming) {
+    const changes = mutationChanges(part);
+    if (!changes.length) return null;
+    const wrap = el('div', 'msg-change-set');
+    changes.forEach((change, index) => {
+      wrap.append(buildChangeCard(change, result, streaming, index, changes.length));
+    });
+    return wrap;
+  }
+
+  function emptyChangeSnapshot(sessionId) {
+    return { sessionId: sessionId ?? null, fileCount: 0, additions: 0, deletions: 0, files: [] };
+  }
+
+  function addSnapshotChange(files, change, state, callId) {
+    let file = files.get(change.path);
+    if (!file) {
+      file = {
+        path: change.path,
+        oldPath: change.oldPath || null,
+        kind: change.kind,
+        state,
+        additions: 0,
+        deletions: 0,
+        rows: [],
+        callIds: [],
+      };
+      files.set(change.path, file);
+    } else if (file.rows.length && change.rows.length) {
+      file.rows.push({ type: 'hunk', text: '' });
+    }
+    file.oldPath = change.oldPath || file.oldPath;
+    file.kind = change.kind || file.kind;
+    if (state === 'running') file.state = 'running';
+    file.additions += change.additions || 0;
+    file.deletions += change.deletions || 0;
+    file.rows.push(...compactContextRows(change.rows));
+    if (callId && !file.callIds.includes(callId)) file.callIds.push(callId);
+  }
+
+  // Message history is the source of truth. Provisional live mutation tools
+  // are layered on top until the end-of-turn history resync replaces them.
+  function buildChangeSnapshot() {
+    if (!activeSessionId) return emptyChangeSnapshot(null);
+    const files = new Map();
+    const seenCalls = new Set();
+    const results = collectResults();
+
+    for (const message of messages) {
+      if (message.role !== 'assistant') continue;
+      for (const part of message.content) {
+        if (part.type !== 'tool_use') continue;
+        const changes = mutationChanges(part);
+        if (!changes.length) continue;
+        const callId = String(part.tool_call_id || '');
+        const result = callId ? results.get(callId) : undefined;
+        if (result?.is_error) continue;
+        const state = result ? 'done' : 'running';
+        for (const change of changes) addSnapshotChange(files, change, state, callId);
+        if (callId) seenCalls.add(callId);
+      }
+    }
+
+    for (const live of liveStreams.values()) {
+      for (const tool of live.tools.values()) {
+        const callId = String(tool.part.tool_call_id || '');
+        if ((callId && seenCalls.has(callId)) || tool.result?.is_error) continue;
+        const changes = mutationChanges(tool.part);
+        const state = tool.result ? 'done' : 'running';
+        for (const change of changes) addSnapshotChange(files, change, state, callId);
+      }
+    }
+
+    const list = Array.from(files.values());
+    return {
+      sessionId: activeSessionId,
+      fileCount: list.length,
+      additions: list.reduce((sum, file) => sum + file.additions, 0),
+      deletions: list.reduce((sum, file) => sum + file.deletions, 0),
+      files: list,
+    };
+  }
+
+  function emitChangeSnapshot(snapshot) {
+    currentChangeSnapshot = snapshot;
+    if (typeof window.CustomEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('kimi:changes-updated', { detail: snapshot }));
+    }
+  }
+
+  function publishChanges() {
+    emitChangeSnapshot(buildChangeSnapshot());
   }
 
   // Expanded tool row body: formatted blocks (built with textContent only, so
@@ -535,7 +946,7 @@
 
   // History/id-stream block: open while running (unless the user closed it),
   // collapsed when done (unless the user opened it) — processIntent rules.
-  function buildProcessBlock(parts, results, running, msgId) {
+  function buildProcessBlock(parts, results, running, msgId, toolCount) {
     const { box, title, meta, body } = buildProcessShell(running);
     for (const p of parts) {
       if (p.type === 'thinking') {
@@ -549,7 +960,7 @@
       title.textContent = processActivityText(parts, results);
       box.open = processIntent.get(msgId) !== 'closed';
     } else {
-      setProcessHeaderDone(title, meta, processToolCount(parts));
+      setProcessHeaderDone(title, meta, toolCount ?? processToolCount(parts));
       box.open = processIntent.get(msgId) === 'open';
     }
     return box;
@@ -606,7 +1017,8 @@
     // assistant: one process block (thinking + tool steps, any position) plus
     // the markdown answer text outside it; attachments keep their order.
     const processParts = [];
-    const surface = []; // ordered {kind:'md'|'attach'} items rendered after the block
+    const surface = []; // ordered {kind:'md'|'change'|'attach'} items rendered after the block
+    let toolCount = 0;
     let mdBuffer = '';
     const flushMd = () => {
       if (!mdBuffer.trim()) { mdBuffer = ''; return; }
@@ -621,6 +1033,7 @@
         if (raw) {
           flushMd();
           processParts.push(raw);
+          toolCount++;
         } else {
           mdBuffer += (mdBuffer ? '\n' : '') + p.text;
         }
@@ -628,7 +1041,9 @@
         if (p.thinking && p.thinking.trim()) processParts.push(p);
       } else if (p.type === 'tool_use') {
         flushMd();
-        processParts.push(p);
+        toolCount++;
+        if (mutationChanges(p).length) surface.push({ kind: 'change', part: p });
+        else processParts.push(p);
       } else if (p.type === 'image' || p.type === 'file') {
         flushMd();
         surface.push({ kind: 'attach', part: p });
@@ -637,7 +1052,13 @@
     }
     flushMd();
     if (processParts.length) {
-      row.append(buildProcessBlock(processParts, results, !!(streaming && streamNodes.get(m.id)), m.id));
+      row.append(buildProcessBlock(
+        processParts,
+        results,
+        !!(streaming && streamNodes.get(m.id)),
+        m.id,
+        toolCount,
+      ));
     }
     for (const item of surface) {
       if (item.kind === 'md') {
@@ -646,6 +1067,9 @@
         md.innerHTML = mdRender(item.text);
         block.append(md);
         row.append(block);
+      } else if (item.kind === 'change') {
+        const result = item.part.tool_call_id ? results.get(item.part.tool_call_id) : undefined;
+        row.append(buildChangeSet(item.part, result, !!(streaming && streamNodes.get(m.id))));
       } else {
         row.append(buildAttachment(item.part));
       }
@@ -670,11 +1094,15 @@
     const row = transcriptEl.querySelector('[data-message-id="' + (window.CSS ? CSS.escape(m.id) : m.id) + '"]');
     if (!row) { appendMessageNode(m); return; }
     const open = new Set();
+    const changeOpen = new Map();
     // Index over ALL details (not just open ones) so keys stay stable when a
     // closed details sits between open ones. The .msg-process block is
     // excluded: its open state is driven by processIntent in buildProcessBlock.
     const all = Array.from(row.querySelectorAll('details'));
     all.forEach((d, i) => {
+      if (d.classList.contains('msg-change')) {
+        changeOpen.set(d.dataset.changePath || String(i), d.open);
+      }
       if (!d.open || d.classList.contains('msg-process')) return;
       const nameEl = d.querySelector('.msg-tool-name');
       open.add(nameEl ? 'tool:' + nameEl.textContent + ':' + i : 'idx:' + i);
@@ -682,6 +1110,11 @@
     fillMessage(row, m, collectResults(), busy);
     Array.from(row.querySelectorAll('details')).forEach((d, i) => {
       if (d.classList.contains('msg-process')) return;
+      if (d.classList.contains('msg-change')) {
+        const key = d.dataset.changePath || String(i);
+        if (changeOpen.has(key)) d.open = changeOpen.get(key);
+        return;
+      }
       const nameEl = d.querySelector('.msg-tool-name');
       if (open.has(nameEl ? 'tool:' + nameEl.textContent + ':' + i : 'idx:' + i)) d.open = true;
     });
@@ -692,7 +1125,11 @@
     streamNodes.clear();
     liveStreams.clear(); // provisional live rows are replaced by history
     transcriptEl.innerHTML = '';
-    if (!messages.length) { renderEmptyState(); return; }
+    if (!messages.length) {
+      renderEmptyState();
+      publishChanges();
+      return;
+    }
     const results = collectResults();
     for (const m of messages) {
       if (isFullyClaimedToolMessage(m)) continue; // folded into existing tool rows
@@ -701,6 +1138,7 @@
       fillMessage(row, m, results, false);
       transcriptEl.append(row);
     }
+    publishChanges();
   }
 
   function renderEmptyState() {
@@ -772,13 +1210,14 @@
     const row = el('div', 'msg-row msg-live');
     const { box, title, meta, body } = buildProcessShell(true);
     box.open = true; // auto-open while the turn runs
+    const changeWrap = el('div', 'msg-live-changes');
     const textWrap = el('div', 'msg-assistant');
     const textMd = el('div', 'md');
     textWrap.append(textMd);
-    row.append(box, textWrap);
+    row.append(box, changeWrap, textWrap);
     transcriptEl.append(row);
     ls = {
-      row, block: box, titleEl: title, metaEl: meta, bodyEl: body,
+      row, block: box, titleEl: title, metaEl: meta, bodyEl: body, changeWrap,
       textMd, thinking: '', thinkMd: null, text: '',
       tools: new Map(),          // toolCallId -> { part, rowEl, done }
       activity: 'working', toolName: '',
@@ -835,12 +1274,14 @@
       tool_name: data.name ?? data.tool_name ?? 'tool',
       input: data.args ?? data.input ?? null,
     };
-    const rowEl = buildToolRow(part, null, true);
-    ls.tools.set(id, { part, rowEl, done: false });
-    ls.bodyEl.append(rowEl);
+    const changeSet = buildChangeSet(part, null, true);
+    const rowEl = changeSet || buildToolRow(part, null, true);
+    ls.tools.set(id, { part, rowEl, done: false, isChange: !!changeSet });
+    (changeSet ? ls.changeWrap : ls.bodyEl).append(rowEl);
     ls.activity = 'tool';
     ls.toolName = part.tool_name;
     updateLiveHeader(ls);
+    publishChanges();
     maybeScroll();
   }
 
@@ -859,11 +1300,28 @@
       output: data.output,
       is_error: !!(data.is_error ?? data.isError),
     };
-    const rowEl = buildToolRow(t.part, result, false);
-    if (t.rowEl.open) rowEl.open = true;
+    const changeOpen = new Map();
+    if (t.isChange) {
+      t.rowEl.querySelectorAll('details.msg-change').forEach((card) => {
+        changeOpen.set(card.dataset.changePath || '', card.open);
+      });
+    }
+    const rowEl = t.isChange
+      ? (buildChangeSet(t.part, result, false) || buildToolRow(t.part, result, false))
+      : buildToolRow(t.part, result, false);
+    if (t.isChange) {
+      rowEl.querySelectorAll('details.msg-change').forEach((card) => {
+        if (changeOpen.has(card.dataset.changePath || '')) {
+          card.open = changeOpen.get(card.dataset.changePath || '');
+        }
+      });
+    } else if (t.rowEl.open) {
+      rowEl.open = true;
+    }
     t.rowEl.replaceWith(rowEl);
     t.rowEl = rowEl;
     t.done = true;
+    t.result = result;
     let next = null;
     for (const e of ls.tools.values()) { if (!e.done) next = e; }
     if (next) {
@@ -873,6 +1331,7 @@
       ls.activity = 'working';
     }
     updateLiveHeader(ls);
+    publishChanges();
     maybeScroll();
   }
 
@@ -911,6 +1370,7 @@
     appendMessageNode(m);
     // A tool-result message flips its claimant tool rows to done/error.
     if (m.role === 'tool') for (const c of claimantMessages(m)) rerenderMessageNode(c);
+    publishChanges();
     maybeScroll();
   }
 
@@ -926,6 +1386,7 @@
     if (m.role === 'tool') {
       for (const c of claimantMessages(m)) if (c.id !== m.id) rerenderMessageNode(c);
     }
+    publishChanges();
     maybeScroll();
   }
 
@@ -1201,7 +1662,10 @@
   }
 
   function setActiveSession(id) {
-    activeSessionId = id ?? null;
+    const next = id ?? null;
+    const changed = next !== activeSessionId;
+    activeSessionId = next;
+    if (changed) emitChangeSnapshot(emptyChangeSnapshot(next));
   }
 
   function reset() {
@@ -1222,6 +1686,7 @@
       renderEmptyState();
       pinned = true;
     }
+    emitChangeSnapshot(emptyChangeSnapshot(activeSessionId));
   }
 
   window.Chat = {
@@ -1234,6 +1699,7 @@
     reset,
     scrollToBottom,
     scrollToMessage,
+    getChangeSummary: () => currentChangeSnapshot,
   };
 
   // app.js may load after us; init as soon as the DOM is usable either way.

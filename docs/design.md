@@ -179,6 +179,41 @@ an inline `<svg>`, the CSS glyph hides via `:has(svg)` (same convention as
 - Tables are **hairline-only**: horizontal 0.5px row separators, no boxed
   grid; header row keeps the `--bg-secondary` fill.
 
+## v8 file-change cards
+
+File-mutating tools (`Edit`, `Write`, `MultiEdit`, `NotebookEdit`, and
+`apply_patch`) render as first-class change cards in the assistant transcript
+instead of being buried inside the generic tool log.
+
+- Each changed file gets its own `.msg-change` card with a localized action,
+  full path tooltip, and `+N` / `-N` line counts.
+- Opening a card reveals a line-level diff with old/new number gutters,
+  restrained success/danger fills, collapsed unchanged runs, and a bounded
+  scroll area for large writes.
+- Multi-file `apply_patch` calls become a `.msg-change-set`; the first file is
+  open by default and the remaining file summaries stay visible.
+- Running and failed edits use the same state model as tool rows. Failures keep
+  the attempted diff visible and append the tool error below it.
+- Change cards live outside `.msg-process`, so applied edits remain visible even
+  after the thinking disclosure collapses.
+- The component uses the existing dark-first tokens and has an explicit
+  narrow-window layout at 640px.
+- `#changes-summary-btn` appears in the composer options row when the active
+  session has recorded edits. It reports the unique file count plus cumulative
+  added/deleted line totals.
+- The right side uses one persistent `#panel` with `Activity` and `Changes`
+  tabs; it never creates or stacks a second inspector. Clicking the composer
+  summary opens the existing panel and selects its `Changes` tab.
+- The Changes tab badge reports the current unique file count. Its body groups
+  repeated edits by file, keeps per-file statistics, and switches the diff
+  detail without leaving the conversation. The Activity tab keeps run status,
+  tasks, recent tools, and touched-file chips in the same panel.
+- The selected tab remains active while the panel is closed and reopened.
+  Arrow keys plus Home/End switch tabs for keyboard users.
+- Change summaries are rebuilt from message history on every session load;
+  failed mutations are excluded and in-progress tools are layered in until the
+  authoritative history resync arrives.
+
 ## Motion (v3) — applied emil-design-eng / review-animations rules
 
 Source: `github.com/emilkowalski/skills` (cloned to `/tmp/emil-skills`),

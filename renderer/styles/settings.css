@@ -512,3 +512,64 @@
 #composer-options #context-meter {
   margin-left: auto;
 }
+
+/* File-change summary (v8): a compact Codex-style review entry point at the
+   right side of the composer options row. */
+#composer-options #changes-summary-btn {
+  flex: none;
+  min-width: 0;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 0.5px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+#composer-options #changes-summary-btn[hidden] {
+  display: none;
+}
+
+#composer-options #changes-summary-btn:not([hidden]) {
+  margin-left: auto;
+}
+
+#composer-options #changes-summary-btn:not([hidden]) + #context-meter {
+  margin-left: 0;
+}
+
+#composer-options #changes-summary-btn:hover {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  background: var(--hover-bg);
+  color: var(--text);
+}
+
+#composer-options #changes-summary-btn:active {
+  transform: scale(0.98);
+  background: var(--active-bg);
+}
+
+.changes-summary-label {
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.changes-summary-chevron {
+  color: var(--text-dim);
+  font-size: 14px;
+}
+
+@media (max-width: 640px) {
+  .changes-summary-label {
+    max-width: 92px;
+  }
+}

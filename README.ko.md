@@ -1,6 +1,6 @@
 # kimi-gui
 
-![version](https://img.shields.io/badge/version-0.4.0-blue)
+![version](https://img.shields.io/badge/version-0.5.0-blue)
 ![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey)
 ![Electron](https://img.shields.io/badge/Electron-43-47848F?logo=electron&logoColor=white)
 ![made with](https://img.shields.io/badge/made%20with-vanilla%20JS%20%28no%20bundler%29-yellow)
@@ -60,9 +60,15 @@ kimi-gui는 두 가지 교체 가능한 엔진을 제공하며, 설정에서 한
 
 CLI 시절의 세션이 내장 엔진 세션과 나란히 하나의 사이드바에 표시됩니다 — 열기, 이어하기, 이름 변경, 삭제 모두 가능합니다. 커스텀 그룹을 만들어 드래그 앤 드롭으로 세션을 정리할 수 있고, 그룹에 속하지 않은 세션은 최근 내역에 남습니다. ⌘F(Windows: Ctrl+F)로 전체 세션을 대상으로 전문 검색을 수행하고, 결과를 클릭하면 해당 메시지 위치로 이동합니다.
 
-### 에이전트 작업 패널
+### 파일 변경 검토와 에이전트 작업 패널
 
-우측 패널에서 에이전트의 현재 상태를 실시간으로 확인할 수 있습니다: 작업 목록, 최근 도구 활동, 변경된 파일.
+Kimi가 문서나 코드를 수정하면 대화 안에 GPT/Codex 스타일의 변경 카드가
+표시됩니다. 파일별 diff와 추가·삭제된 줄 수를 펼쳐볼 수 있고, 입력창 아래
+요약 패널에는 변경된 파일 수와 누적 `+`/`-` 줄 수가 표시됩니다.
+
+요약 패널을 누르면 하나의 우측 패널에서 **변경사항** 탭이 열립니다. 같은
+패널의 **작업** 탭에서는 현재 상태, 작업 목록, 최근 도구 활동과 변경된
+파일을 실시간으로 확인할 수 있습니다.
 
 ### 입력창 옵션 pill
 

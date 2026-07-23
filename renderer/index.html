@@ -112,6 +112,8 @@
                     title="Select model — applies to this chat" data-i18n-title="options.model.pick_title"></button>
             <button id="swarm-toggle" class="pill" type="button" hidden></button>
             <button id="effort-select" class="pill" type="button" hidden></button>
+            <button id="changes-summary-btn" type="button" hidden
+                    title="Review file changes" aria-label="Review file changes"></button>
             <!-- context meter rides at the row's right edge (v5) -->
             <span id="context-meter" role="status"></span>
           </div>
@@ -122,10 +124,10 @@
         <div id="session-usage"></div>
       </section>
     </main>
-    <!-- Right agent-work panel (R3 owns behavior). -->
+    <!-- Single right panel with activity/change-review tabs (R3 owns behavior). -->
     <aside id="panel" hidden>
       <div id="panel-header">
-        <span id="panel-title"></span>
+        <span id="panel-title" data-i18n="panel.title">Agent panel</span>
         <button id="panel-close-btn" type="button" title="Close panel" aria-label="Close panel"
                 data-i18n-title="panel.close" data-i18n-aria="panel.close">
           <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden="true">
@@ -133,11 +135,26 @@
           </svg>
         </button>
       </div>
+      <div id="panel-tabs" role="tablist" aria-label="Panel views"
+           data-i18n-aria="panel.tabs_aria">
+        <button id="panel-tab-activity" class="panel-tab active" type="button" role="tab"
+                aria-selected="true" aria-controls="panel-work" tabindex="0">
+          <span data-i18n="panel.tab_activity">Activity</span>
+        </button>
+        <button id="panel-tab-changes" class="panel-tab" type="button" role="tab"
+                aria-selected="false" aria-controls="panel-changes" tabindex="-1">
+          <span data-i18n="panel.tab_changes">Changes</span>
+          <span id="panel-tab-change-count" class="panel-tab-count" hidden>0</span>
+        </button>
+      </div>
       <div id="panel-content">
-        <div id="panel-status"></div>
-        <div id="panel-tasks"></div>
-        <div id="panel-activity"></div>
-        <div id="panel-files"></div>
+        <div id="panel-work" role="tabpanel" aria-labelledby="panel-tab-activity">
+          <div id="panel-status"></div>
+          <div id="panel-tasks"></div>
+          <div id="panel-activity"></div>
+          <div id="panel-files"></div>
+        </div>
+        <div id="panel-changes" role="tabpanel" aria-labelledby="panel-tab-changes" hidden></div>
       </div>
     </aside>
   </div>

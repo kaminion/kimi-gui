@@ -1,11 +1,12 @@
-/* panel.js — right-side agent-work panel (v2).
- * Exposes window.Panel = { toggle(force?), setActiveSession(id), handleEvent(sessionId, event) }.
+/* panel.js — single tabbed agent-work and file-change panel (v4).
+ * Exposes window.Panel = { toggle(force?), openChanges(), setActiveSession(id),
+ * handleEvent(sessionId, event) }.
  * Classic script-tag module: reads window.kimi (preload bridge), window.App (shell
  * store, optional), window.I18N (optional); no imports.
  *
- * The shell (R6) owns the static markup (#panel > #panel-header + #panel-content
- * with #panel-status/#panel-tasks/#panel-activity/#panel-files) and wires the
- * header toggle button; Panel owns everything rendered INSIDE those containers.
+ * The shell (R6) owns the static markup (#panel header, tablist, and tabpanels)
+ * and wires the header toggle button; Panel owns everything rendered inside
+ * the activity/change containers.
  *
  * Wire facts (docs/protocol.md + docs/ref/webui-bundle.js, kimi 0.28.1):
  * - Events arrive as raw WS frames {type, session_id, payload:{...}}; the type may
@@ -30,6 +31,7 @@
   const ACTIVITY_MAX = 30;       // per-session ring buffer of tool activities
   const FILES_MAX = 50;          // per-session changed-file chips
   const SUMMARY_MAX = 80;        // one-line tool input summary
+  const CHANGE_ROWS_MAX = 600;    // right-panel diff render cap
 
   // Tools that mutate files; value = arg keys holding the path (snake + camel).
   const FILE_TOOL_ARGS = {
@@ -40,16 +42,31 @@
   };
 
   // ---- module state --------------------------------------------------------
-  const els = { root: null, title: null, closeBtn: null, content: null, status: null, tasks: null, activity: null, files: null, empty: null };
+  const els = {
+    root: null, title: null, closeBtn: null, content: null,
+    tabs: null, activityTab: null, changesTab: null, changesTabCount: null,
+    work: null, status: null, tasks: null, activity: null, files: null, changes: null,
+    summaryBtn: null, composerOptions: null, empty: null,
+  };
   let bound = false;
   let open = false;
+  let activeTab = 'activity';     // activity | changes
   let activeId = null;
   const sessions = new Map();    // sid -> { busy, activeTool, activities, files, tasks, tasksErr }
   let pollTimer = null;
   let taskRefetchTimer = null;
 
   function freshState() {
-    return { busy: false, activeTool: null, activities: [], files: [], tasks: null, tasksErr: false };
+    return {
+      busy: false,
+      activeTool: null,
+      activities: [],
+      files: [],
+      tasks: null,
+      tasksErr: false,
+      changes: { sessionId: null, fileCount: 0, additions: 0, deletions: 0, files: [] },
+      selectedChangePath: null,
+    };
   }
   function stateFor(sid) {
     let st = sessions.get(sid);
@@ -306,10 +323,167 @@
     els.files.appendChild(list);
   }
 
+  function filesChangedText(count) {
+    return T('changes.files_changed', '파일 N개 변경됨').replace('N', count);
+  }
+
+  function appendChangeStats(parent, additions, deletions) {
+    parent.append(
+      el('span', 'change-stat additions', '+' + (additions || 0)),
+      el('span', 'change-stat deletions', '-' + (deletions || 0)),
+    );
+  }
+
+  function renderSummaryButton(st) {
+    const snapshot = st?.changes;
+    const hasChanges = !!(activeId && snapshot && snapshot.fileCount > 0);
+    const fileCount = hasChanges ? snapshot.fileCount : 0;
+    if (els.changesTabCount) {
+      els.changesTabCount.textContent = String(fileCount);
+      els.changesTabCount.hidden = fileCount === 0;
+    }
+    if (els.changesTab) {
+      els.changesTab.title = hasChanges
+        ? filesChangedText(fileCount)
+        : T('changes.empty', '기록된 변경사항이 없습니다');
+    }
+    if (!els.summaryBtn) return;
+    els.summaryBtn.hidden = !hasChanges;
+    els.composerOptions?.classList.toggle('has-file-changes', hasChanges);
+    if (!hasChanges) {
+      els.summaryBtn.textContent = '';
+      return;
+    }
+
+    els.summaryBtn.textContent = '';
+    els.summaryBtn.append(el('span', 'changes-summary-label', filesChangedText(snapshot.fileCount)));
+    appendChangeStats(els.summaryBtn, snapshot.additions, snapshot.deletions);
+    els.summaryBtn.append(el('span', 'changes-summary-chevron', '›'));
+    const openLabel = T('changes.open_review', '변경사항 검토 열기');
+    els.summaryBtn.title = openLabel;
+    els.summaryBtn.setAttribute(
+      'aria-label',
+      filesChangedText(snapshot.fileCount) + ', +' + snapshot.additions + ', -' + snapshot.deletions + '. ' + openLabel,
+    );
+  }
+
+  function buildPanelChangeLine(row) {
+    const line = el('div', 'msg-change-line ' + row.type);
+    if (row.type === 'fold') {
+      const label = row.more
+        ? T('chat.change.more_lines', 'N줄 더 있음').replace('N', row.count)
+        : T('chat.change.unchanged', '변경 없는 N줄').replace('N', row.count);
+      line.append(el('span', 'msg-change-fold', label));
+      return line;
+    }
+    if (row.type === 'hunk') {
+      line.append(el('span', 'msg-change-hunk', row.text || T('chat.change.next_hunk', '다음 변경')));
+      return line;
+    }
+    line.append(
+      el('span', 'msg-change-number', row.oldNo == null ? '' : row.oldNo),
+      el('span', 'msg-change-number', row.newNo == null ? '' : row.newNo),
+      el('span', 'msg-change-marker', row.type === 'add' ? '+' : row.type === 'del' ? '-' : ' '),
+      el('code', 'msg-change-code', row.text),
+    );
+    return line;
+  }
+
+  function renderChanges(st) {
+    if (!els.changes) return;
+    els.changes.textContent = '';
+    const snapshot = st.changes;
+    const files = Array.isArray(snapshot?.files) ? snapshot.files : [];
+    if (!files.length) {
+      els.changes.append(el('div', 'panel-empty', T('changes.empty', '기록된 변경사항이 없습니다')));
+      return;
+    }
+
+    const overview = el('div', 'panel-change-overview');
+    overview.append(el('span', 'panel-change-count', filesChangedText(snapshot.fileCount)));
+    const overviewStats = el('span', 'panel-change-stats');
+    appendChangeStats(overviewStats, snapshot.additions, snapshot.deletions);
+    overview.append(overviewStats);
+    els.changes.append(overview);
+
+    if (!st.selectedChangePath || !files.some((file) => file.path === st.selectedChangePath)) {
+      st.selectedChangePath = files[0].path;
+    }
+
+    const list = el('div', 'panel-change-file-list');
+    for (const file of files) {
+      const button = el('button', 'panel-change-file' + (file.path === st.selectedChangePath ? ' active' : ''));
+      button.type = 'button';
+      button.title = file.path;
+      button.append(el('span', 'panel-change-file-path', file.path));
+      const stats = el('span', 'panel-change-file-stats');
+      appendChangeStats(stats, file.additions, file.deletions);
+      button.append(stats);
+      if (file.state === 'running') {
+        button.classList.add('running');
+        button.setAttribute('aria-label', file.path + ', ' + T('changes.editing', '수정 중'));
+      }
+      button.addEventListener('click', () => {
+        st.selectedChangePath = file.path;
+        renderChanges(st);
+      });
+      list.append(button);
+    }
+    els.changes.append(list);
+
+    const selected = files.find((file) => file.path === st.selectedChangePath) || files[0];
+    const detail = el('section', 'panel-change-detail');
+    const detailHeader = el('div', 'panel-change-detail-header');
+    const displayPath = selected.oldPath ? selected.oldPath + ' → ' + selected.path : selected.path;
+    detailHeader.append(el('span', 'panel-change-detail-path', displayPath));
+    const detailStats = el('span', 'panel-change-detail-stats');
+    appendChangeStats(detailStats, selected.additions, selected.deletions);
+    detailHeader.append(detailStats);
+    detail.append(detailHeader);
+
+    if (selected.rows.length) {
+      const diff = el('div', 'msg-change-diff panel-change-diff');
+      diff.setAttribute('role', 'region');
+      diff.setAttribute('aria-label', T('chat.change.diff_aria', '파일 변경 내용') + ': ' + selected.path);
+      const visible = selected.rows.slice(0, CHANGE_ROWS_MAX);
+      for (const row of visible) diff.append(buildPanelChangeLine(row));
+      if (selected.rows.length > visible.length) {
+        diff.append(buildPanelChangeLine({
+          type: 'fold',
+          count: selected.rows.length - visible.length,
+          more: true,
+        }));
+      }
+      detail.append(diff);
+    } else {
+      detail.append(el('div', 'panel-change-no-preview', T('changes.no_preview', '줄 단위 변경 내용이 없습니다')));
+    }
+    els.changes.append(detail);
+  }
+
   function render() {
     if (!bound) return;
     const st = activeId ? sessions.get(activeId) : null;
     const hasSession = !!(activeId && st);
+    renderSummaryButton(st);
+    const showActivity = activeTab === 'activity';
+    if (els.activityTab) {
+      els.activityTab.classList.toggle('active', showActivity);
+      els.activityTab.setAttribute('aria-selected', String(showActivity));
+      els.activityTab.tabIndex = showActivity ? 0 : -1;
+    }
+    if (els.changesTab) {
+      els.changesTab.classList.toggle('active', !showActivity);
+      els.changesTab.setAttribute('aria-selected', String(!showActivity));
+      els.changesTab.tabIndex = showActivity ? -1 : 0;
+    }
+    if (els.work) els.work.hidden = !showActivity;
+    if (els.changes) els.changes.hidden = showActivity;
+
+    if (!showActivity) {
+      renderChanges(st || freshState());
+      return;
+    }
     if (els.empty) els.empty.hidden = hasSession;
     for (const key of ['status', 'tasks', 'activity', 'files']) {
       if (els[key]) els[key].hidden = !hasSession;
@@ -330,7 +504,23 @@
     ensurePolling();
   }
   function toggle(force) {
-    setOpen(typeof force === 'boolean' ? force : !open);
+    const next = typeof force === 'boolean' ? force : !open;
+    setOpen(next);
+  }
+
+  function selectTab(next, focus) {
+    if (next !== 'activity' && next !== 'changes') return;
+    activeTab = next;
+    render();
+    if (focus) {
+      const target = next === 'activity' ? els.activityTab : els.changesTab;
+      target?.focus();
+    }
+  }
+
+  function openChanges() {
+    activeTab = 'changes';
+    setOpen(true);
   }
 
   // ---- public: session selection ---------------------------------------------------
@@ -344,6 +534,8 @@
     // any work_changed event for this session has been seen).
     const known = window.App?.state?.sessions?.find?.((s) => s && s.id === activeId);
     if (known && typeof known.busy === 'boolean') st.busy = known.busy;
+    const snapshot = window.Chat?.getChangeSummary?.();
+    if (snapshot?.sessionId === activeId) st.changes = snapshot;
     render();
     refreshTasks(activeId);
     ensurePolling();
@@ -441,13 +633,30 @@
     if (changed && sid === activeId && open) render();
   }
 
+  function handleChangeSnapshot(event) {
+    const snapshot = event?.detail;
+    const sid = snapshot?.sessionId;
+    if (!sid) return;
+    const st = stateFor(sid);
+    st.changes = snapshot;
+    if (st.selectedChangePath && !snapshot.files?.some?.((file) => file.path === st.selectedChangePath)) {
+      st.selectedChangePath = null;
+    }
+    if (sid !== activeId || !bound) return;
+    renderSummaryButton(st);
+    if (open && activeTab === 'changes') render();
+  }
+
+  window.addEventListener('kimi:changes-updated', handleChangeSnapshot);
+
   // (Re)apply the language-dependent static strings (bind + language change).
   function applyStrings() {
-    if (els.title) els.title.textContent = T('panel.title', '에이전트 작업');
+    if (els.title) els.title.textContent = T('panel.title', '에이전트 패널');
     if (els.closeBtn) {
       els.closeBtn.setAttribute('aria-label', T('panel.close', '패널 닫기'));
       els.closeBtn.title = T('panel.close', '패널 닫기');
     }
+    if (els.tabs) els.tabs.setAttribute('aria-label', T('panel.tabs_aria', '패널 보기'));
     if (els.empty) els.empty.textContent = T('panel.empty', '실행 중인 작업이 없습니다');
   }
 
@@ -458,21 +667,38 @@
     if (!els.root) return false;
     els.title = document.getElementById('panel-title');
     els.closeBtn = document.getElementById('panel-close-btn');
+    els.tabs = document.getElementById('panel-tabs');
+    els.activityTab = document.getElementById('panel-tab-activity');
+    els.changesTab = document.getElementById('panel-tab-changes');
+    els.changesTabCount = document.getElementById('panel-tab-change-count');
     els.content = document.getElementById('panel-content');
+    els.work = document.getElementById('panel-work');
     els.status = document.getElementById('panel-status');
     els.tasks = document.getElementById('panel-tasks');
     els.activity = document.getElementById('panel-activity');
     els.files = document.getElementById('panel-files');
+    els.changes = document.getElementById('panel-changes');
+    els.summaryBtn = document.getElementById('changes-summary-btn');
+    els.composerOptions = document.getElementById('composer-options');
 
     if (els.closeBtn) {
       if (!els.closeBtn.textContent) els.closeBtn.textContent = '✕';
       // Direct idempotent close — safe even if the shell also wires this button.
       els.closeBtn.addEventListener('click', () => setOpen(false));
     }
-    if (els.content) {
+    if (els.work) {
       els.empty = el('div', 'panel-empty');
-      els.content.appendChild(els.empty);
+      els.work.appendChild(els.empty);
     }
+    els.activityTab?.addEventListener('click', () => selectTab('activity'));
+    els.changesTab?.addEventListener('click', () => selectTab('changes'));
+    els.tabs?.addEventListener('keydown', (event) => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      const next = event.key === 'ArrowLeft' || event.key === 'Home' ? 'activity' : 'changes';
+      selectTab(next, true);
+    });
+    els.summaryBtn?.addEventListener('click', openChanges);
     applyStrings();
 
     let stored = null;
@@ -488,10 +714,11 @@
   window.I18N?.onChange?.(() => {
     if (!bound) return;
     applyStrings();
+    renderSummaryButton(activeId ? sessions.get(activeId) : null);
     if (open) render();
   });
 
-  window.Panel = { toggle, setActiveSession, handleEvent };
+  window.Panel = { toggle, openChanges, selectTab, setActiveSession, handleEvent };
 
   if (!bind()) {
     document.addEventListener('DOMContentLoaded', () => bind(), { once: true });

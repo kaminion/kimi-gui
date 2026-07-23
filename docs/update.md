@@ -41,17 +41,13 @@ CONTRACT-V2 §Auto-update를 따른다.
 
 ### 저장소/피드
 
-- 업데이트 피드는 GitHub Releases(`kaminion/kimi-gui`)다. `package.json` 최상위의
-  `publish: [{ provider: 'github', owner: 'kaminion', repo: 'kimi-gui' }]` 필드는
-  계약(CONTRACT-V2)상 **placeholder**다. electron-builder 26은 빌드 설정을
-  `package.json`의 `build` 키 **또는** `electron-builder.yml`에서만 읽으므로 최상위
-  `publish` 필드 자체는 빌드에 반영되지 않는다.
+- 업데이트 피드는 GitHub Releases(`kaminion/kimi-gui`)다.
+  `electron-builder.yml`의 `publish` 설정이 소유자와 저장소를 명시하며,
+  패키징 시 `app-update.yml` 생성과 `--publish` 업로드에 사용된다.
 - ⚠️ 주의: `package.json`에 `build` 키를 추가하면 `electron-builder.yml`이 **통째로
   무시**되므로 절대 추가하지 않는다. 명시적 설정이 필요하면 `electron-builder.yml`에
   `publish:` 섹션을 추가한다(해당 파일 소유자: packaging agent).
-- 다행히 publish 설정이 없어도 electron-builder는 `.git`의 remote origin이 GitHub이면
-  이를 자동 감지해 `app-update.yml`을 번들에 생성하고 `--publish` 업로드에도 사용한다.
-  현재 리포는 이 fallback 경로로 동작한다.
+- `package.json`의 `repository`와 Git remote도 같은 저장소를 가리켜야 한다.
 
 ### 릴리스 절차
 
@@ -74,7 +70,7 @@ CONTRACT-V2 §Auto-update를 따른다.
 - **미서명 개발 빌드**: macOS에서 자동 업데이트 설치 단계는 코드 서명 검증을 요구한다.
   서명/공증 없는 개발 빌드(`hardenedRuntime: false`)에서는 다운로드 후 설치가 실패하며
   `error` 상태로 표시된다. 실제 배포 시 Apple Developer ID 서명 + notarization이 필요하다.
-- 아직 GitHub Release가 하나도 없으면 검사가 404(`latest.yml` 없음)로 실패하고 `error`
-  상태가 표시된다. 첫 릴리스를 올리면 해소된다.
+- Release에서 플랫폼별 업데이트 메타데이터(`latest-mac.yml` 또는
+  `latest.yml`)가 누락되면 해당 플랫폼의 업데이트 검사가 실패한다.
 - 동시에 여러 검사가 요청되면 진행 중인 검사를 공유한다(중복 실행 안 함).
 - 업데이트 오류 메시지는 300자로 절단해 푸시하며, 토큰 등 비밀 값은 로깅하지 않는다.

@@ -1,4 +1,4 @@
-# kimi-gui [![Version](https://img.shields.io/badge/version-0.4.0-blue)](./package.json) [![Commit Activity](https://img.shields.io/github/commit-activity/m/kaminion/kimi-gui)](https://github.com/kaminion/kimi-gui/graphs/commit-activity) [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey)](#requirements)
+# kimi-gui [![Version](https://img.shields.io/badge/version-0.5.0-blue)](./package.json) [![Commit Activity](https://img.shields.io/github/commit-activity/m/kaminion/kimi-gui)](https://github.com/kaminion/kimi-gui/graphs/commit-activity) [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey)](#requirements)
 
 [Kimi Code](https://www.kimi.com/code/) | [GitHub](https://github.com/kaminion/kimi-gui) | [한국어](./README.ko.md)
 
@@ -71,7 +71,15 @@ Choose a model and thinking effort per conversation from compact composer contro
 
 ### Agent activity and usage
 
-The side panel shows current status, tasks, tool activity, and changed files. The Usage view combines daily input/output totals, a seven-day chart, rolling quota windows, and current-session token counts.
+File edits are shown as GPT/Codex-style change cards in the conversation, with
+per-file diffs and added/deleted line counts. A compact summary below the
+composer reports the number of changed files and cumulative `+`/`-` totals.
+Selecting it opens the single right-side panel on its **Changes** tab; switch to
+**Activity** in the same panel to see current status, tasks, tool activity, and
+touched files.
+
+The Usage view combines daily input/output totals, a seven-day chart, rolling
+quota windows, and current-session token counts.
 
 ### Desktop details
 
