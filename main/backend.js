@@ -1038,6 +1038,7 @@ async function directSendPrompt(sessionId, text) {
     turnId,
     contextLimit: modelContextLimit(session),
     approvals: new Map(),
+    steers: [],
   };
   activeTurns.set(sessionId, turn);
 
@@ -1074,6 +1075,7 @@ async function directSendPrompt(sessionId, text) {
       });
     },
     requireApproval: (tool) => requestDirectApproval(sessionId, turn, tool),
+    takeSteers: () => turn.steers.splice(0).map((item) => item.text),
     onUsage: (usage) => pushDirectUsage(sessionId, usage, turn.contextLimit),
   };
 
@@ -1082,16 +1084,25 @@ async function directSendPrompt(sessionId, text) {
   (async () => {
     let reason = 'completed';
     try {
-      await d.client.runTurn({
-        store,
-        sessionId,
-        cwd: session.cwd,
-        model: session.model || DEFAULT_DIRECT_MODEL,
-        effort: session.effort || DEFAULT_DIRECT_EFFORT,
-        prompt: String(text),
-        signal: controller.signal,
-        hooks,
-      });
+      let prompt = String(text);
+      while (!controller.signal.aborted) {
+        await d.client.runTurn({
+          store,
+          sessionId,
+          cwd: session.cwd,
+          model: session.model || DEFAULT_DIRECT_MODEL,
+          effort: session.effort || DEFAULT_DIRECT_EFFORT,
+          prompt,
+          signal: controller.signal,
+          hooks,
+        });
+        // A steer can arrive after direct-client's final boundary check while
+        // it is persisting the turn. Drain that narrow race as a continuation
+        // without dropping the session's busy state.
+        const late = turn.steers.splice(0);
+        if (!late.length) break;
+        prompt = late.map((item) => item.text).join('\n\n');
+      }
       if (controller.signal.aborted) reason = 'aborted';
     } catch (err) {
       reason = controller.signal.aborted ? 'aborted' : 'failed';
@@ -1150,10 +1161,14 @@ async function steer(sessionId, text) {
     await rejectIfDirectSession(sessionId);
     return requireCli().steer(sessionId, text);
   }
-  if (activeTurns.has(sessionId)) {
-    const message = '실행 중에는 스티어할 수 없습니다. 응답이 끝난 후 다시 시도해 주세요.';
-    emitSession(sessionId, { type: 'error', message });
-    throw new Error(message);
+  const turn = activeTurns.get(sessionId);
+  if (turn) {
+    const value = String(text ?? '').trim();
+    if (!value) throw new Error('스티어 텍스트가 비어 있습니다.');
+    const promptId = `prompt_${randomUUID()}`;
+    turn.steers.push({ id: promptId, text: value, createdAt: Date.now() });
+    emitSession(sessionId, { type: 'prompt.steered', prompt_id: promptId });
+    return { prompt_id: promptId, turn_id: turn.turnId, status: 'steered' };
   }
   return directSendPrompt(sessionId, text);
 }

@@ -375,6 +375,7 @@ function createStore({ root }) {
    *     blocks:  [{type:'text',text} | {type:'thinking',thinking,signature?} |
    *              {type:'tool_use',id,name,input}],   // assistant content, in order
    *     results: [{tool_use_id, output, is_error?}], // results for this step's calls
+   *     steers?: [string],                           // user adjustments after this step
    *     stopReason: string,
    *     usage: {input_tokens, output_tokens, cache_read_tokens?, cache_creation_tokens?}
    *   }],
@@ -470,6 +471,21 @@ function createStore({ root }) {
             parentUuid: r.tool_use_id,
             toolCallId: r.tool_use_id,
             result: { output: String(r.output ?? ''), ...(r.is_error ? { is_error: true } : {}) },
+          },
+          time: Date.now(),
+        });
+      }
+      for (const steer of step.steers || []) {
+        const text = String(steer || '').trim();
+        if (!text) continue;
+        lines.push({
+          type: 'context.append_message',
+          message: {
+            role: 'user',
+            content: [{ type: 'text', text }],
+            toolCalls: [],
+            origin: { kind: 'user' },
+            id: newId('msg'),
           },
           time: Date.now(),
         });

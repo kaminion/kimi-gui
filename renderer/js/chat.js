@@ -25,9 +25,9 @@
  * search palette (js/search.js) via App.openSessionAtMessage.
  *
  * v5 (R-UX):
- * - While the active session is busy, #send-btn morphs into a STOP button
- *   (.stop-mode, CSS square glyph); clicking it calls App.abort(). The old
- *   header #abort-btn is gone. Chat.setBusy drives the morph.
+ * - While the active session is busy, the composer stays editable and Enter
+ *   steers the active turn. #composer-abort-btn remains a separate stop action
+ *   so adjusting work never hides or overloads cancellation.
  * - Foreign-engine sessions (engine mismatch — e.g. a direct session opened
  *   under the cli engine) are read-only: Chat.setReadOnly(true) disables the
  *   composer + send button and swaps the placeholder/title for the
@@ -106,6 +106,7 @@
   let transcriptEl = null;
   let composerEl = null;
   let sendBtn = null;
+  let abortBtn = null;
   let initialized = false;
 
   let activeSessionId = null;
@@ -114,6 +115,7 @@
   const liveStreams = new Map();        // turnId -> live process-block state for id-less deltas
   const processIntent = new Map();      // messageId -> 'open'|'closed' (user disclosure intent)
   let optimisticUser = null;            // { text, el } echoed locally until server confirms
+  let optimisticSteers = [];            // [{ text, el }] current-turn adjustments
   let busy = false;
   let readOnly = false;                 // foreign-engine session: composer locked, notice shown
   let currentChangeSnapshot = { sessionId: null, fileCount: 0, additions: 0, deletions: 0, files: [] };
@@ -905,6 +907,20 @@
       : '';
   }
 
+  function updateProcessAction(box, action) {
+    if (!box || !action) return;
+    const open = box.open;
+    action.textContent = open
+      ? T('chat.process.collapse', '접기')
+      : T('chat.process.expand', '펼치기');
+    action.setAttribute(
+      'aria-label',
+      open
+        ? T('chat.process.collapse', '접기')
+        : T('chat.process.expand', '펼치기')
+    );
+  }
+
   function buildProcessShell(running) {
     const box = el('details', 'msg-process' + (running ? ' running' : ''));
     const sum = document.createElement('summary');
@@ -913,10 +929,13 @@
     const chev = el('span', 'msg-process-chevron', '▸');
     const title = el('span', 'msg-process-title', '');
     const meta = el('span', 'msg-process-meta', '');
-    sum.append(status, chev, title, meta);
+    const action = el('span', 'msg-process-action', '');
+    sum.append(status, chev, title, meta, action);
     const body = el('div', 'msg-process-body');
     box.append(sum, body);
-    return { box, title, meta, body };
+    box.addEventListener('toggle', () => updateProcessAction(box, action));
+    updateProcessAction(box, action);
+    return { box, title, meta, action, body };
   }
 
   function appendProcessThinking(body, text) {
@@ -947,7 +966,7 @@
   // History/id-stream block: open while running (unless the user closed it),
   // collapsed when done (unless the user opened it) — processIntent rules.
   function buildProcessBlock(parts, results, running, msgId, toolCount) {
-    const { box, title, meta, body } = buildProcessShell(running);
+    const { box, title, meta, action, body } = buildProcessShell(running);
     for (const p of parts) {
       if (p.type === 'thinking') {
         appendProcessThinking(body, p.thinking);
@@ -963,6 +982,7 @@
       setProcessHeaderDone(title, meta, toolCount ?? processToolCount(parts));
       box.open = processIntent.get(msgId) === 'open';
     }
+    updateProcessAction(box, action);
     return box;
   }
 
@@ -1162,6 +1182,7 @@
         const list = await window.kimi.getMessages(activeSessionId);
         if (Array.isArray(list)) {
           optimisticUser = null;
+          optimisticSteers = [];
           messages = sortByTime(list.map(normMessage).filter((m) => !isMachineMessage(m)));
           fullRedraw();
           maybeScroll();
@@ -1365,6 +1386,18 @@
       maybeScroll();
       return;
     }
+    if (m.role === 'user') {
+      const steerIndex = optimisticSteers.findIndex((item) => item.text === textOfMessage(m));
+      if (steerIndex >= 0) {
+        messages.push(m);
+        const [{ el: row }] = optimisticSteers.splice(steerIndex, 1);
+        row.classList.remove('msg-optimistic', 'msg-steer');
+        row.dataset.messageId = m.id;
+        fillMessage(row, m, collectResults(), busy);
+        maybeScroll();
+        return;
+      }
+    }
     messages.push(m);
     if (m.role === 'assistant') streamNodes.set(m.id, true);
     appendMessageNode(m);
@@ -1507,10 +1540,12 @@
   /** Composer + send-button chrome for the current busy/readOnly state. */
   function refreshComposerUi() {
     if (!initialized) return;
-    composerEl.disabled = busy || readOnly;
+    composerEl.disabled = readOnly;
     if (readOnly) {
       const notice = T('chat.foreign_readonly', '내장 엔진 세션은 열어보기만 가능합니다 · 엔진 전환 시 이어쓸 수 있습니다');
       composerEl.setAttribute('placeholder', notice);
+    } else if (busy) {
+      composerEl.setAttribute('placeholder', T('chat.steer_placeholder', '현재 작업에 조정할 내용을 입력하세요…'));
     } else {
       composerEl.setAttribute('placeholder', T('chat.composer_placeholder', '메시지를 입력하세요…'));
     }
@@ -1519,14 +1554,19 @@
 
   function updateSendBtn() {
     if (!sendBtn) return;
-    // Busy (and not read-only): the send button becomes a stop button —
-    // always clickable; click routes to App.abort() (see wireComposer).
-    const stop = busy && !readOnly;
-    sendBtn.classList.toggle('stop-mode', stop);
-    sendBtn.disabled = readOnly || (!stop && !composerEl.value.trim());
-    if (stop) {
-      sendBtn.setAttribute('aria-label', T('chat.abort_title', '중단'));
-      sendBtn.title = T('chat.abort_title', '중단');
+    const steering = busy && !readOnly;
+    sendBtn.classList.remove('stop-mode');
+    sendBtn.classList.toggle('steer-mode', steering);
+    sendBtn.disabled = readOnly || !composerEl.value.trim();
+    if (abortBtn) {
+      abortBtn.hidden = !steering;
+      abortBtn.disabled = !steering;
+      abortBtn.setAttribute('aria-label', T('chat.abort_title', '중단'));
+      abortBtn.title = T('chat.abort_title', '중단');
+    }
+    if (steering) {
+      sendBtn.setAttribute('aria-label', T('chat.steer_aria', '현재 작업 조정'));
+      sendBtn.title = T('chat.steer_title', '현재 작업 조정 (↵)');
     } else {
       sendBtn.setAttribute('aria-label', T('chat.send_aria', '전송'));
       // Read-only (foreign-engine) sessions explain why the button is inert.
@@ -1551,6 +1591,27 @@
     scrollToBottom();
   }
 
+  function appendOptimisticSteer(text) {
+    clearEmptyState();
+    const row = el('div', 'msg-row msg-user msg-steer msg-optimistic');
+    row.append(
+      el('span', 'msg-steer-label', T('chat.steer_label', '작업 조정')),
+      el('div', 'msg-user-text', text),
+    );
+    transcriptEl.append(row);
+    const pending = { text, el: row };
+    optimisticSteers.push(pending);
+    scrollToBottom();
+    return pending;
+  }
+
+  function rejectOptimisticSteer(pending) {
+    const index = optimisticSteers.indexOf(pending);
+    if (index >= 0) optimisticSteers.splice(index, 1);
+    pending?.el?.remove();
+    appendSystemNote(T('chat.steer_failed', '작업 조정 요청을 전송하지 못했습니다. 다시 시도해 주세요.'));
+  }
+
   function appendSystemNote(text) {
     clearEmptyState();
     const row = el('div', 'msg-row msg-system');
@@ -1560,16 +1621,31 @@
   }
 
   function doSend() {
-    if (busy || readOnly) return;
+    if (readOnly) return;
     const text = composerEl.value.trim();
     if (!text) return;
     const app = window.App;
-    if (!app || typeof app.sendPrompt !== 'function') return;
+    if (!app) return;
+    if (busy) {
+      if (typeof app.steer !== 'function') return;
+      composerEl.value = '';
+      autoGrow();
+      updateSendBtn();
+      const pending = appendOptimisticSteer(text);
+      Promise.resolve()
+        .then(() => app.steer(text))
+        .then((ok) => {
+          if (ok === false) rejectOptimisticSteer(pending);
+        })
+        .catch(() => rejectOptimisticSteer(pending));
+      return;
+    }
+    if (typeof app.sendPrompt !== 'function') return;
     composerEl.value = '';
     autoGrow();
     updateSendBtn();
     appendOptimisticUser(text);
-    setBusy(true); // input locks until the server reports idle again
+    setBusy(true); // enables steer mode until the server reports idle again
     Promise.resolve()
       .then(() => app.sendPrompt(text))
       .then((ok) => {
@@ -1594,13 +1670,9 @@
       }
     });
     composerEl.addEventListener('input', () => { autoGrow(); updateSendBtn(); });
-    sendBtn.addEventListener('click', () => {
-      // Stop-mode: while the session is busy the button aborts instead of sending.
-      if (busy && !readOnly) {
-        if (window.App && typeof window.App.abort === 'function') window.App.abort();
-        return;
-      }
-      doSend();
+    sendBtn.addEventListener('click', doSend);
+    abortBtn?.addEventListener('click', () => {
+      if (busy && !readOnly && typeof window.App?.abort === 'function') window.App.abort();
     });
   }
 
@@ -1610,6 +1682,7 @@
     transcriptEl = document.getElementById('transcript');
     composerEl = document.getElementById('composer');
     sendBtn = document.getElementById('send-btn');
+    abortBtn = document.getElementById('composer-abort-btn');
     if (!transcriptEl || !composerEl || !sendBtn) return; // DOM not ready
     initialized = true;
     wireComposer();
@@ -1641,6 +1714,7 @@
     if (sessionId !== undefined) activeSessionId = sessionId;
     if (reloadTimer) { clearTimeout(reloadTimer); reloadTimer = null; }
     optimisticUser = null;
+    optimisticSteers = [];
     liveStreams.clear();
     processIntent.clear();
     messages = sortByTime((Array.isArray(list) ? list : []).map(normMessage).filter((m) => !isMachineMessage(m)));
@@ -1674,6 +1748,7 @@
     liveStreams.clear();
     processIntent.clear();
     optimisticUser = null;
+    optimisticSteers = [];
     readOnly = false;
     if (reloadTimer) { clearTimeout(reloadTimer); reloadTimer = null; }
     if (highlightTimer) { clearTimeout(highlightTimer); highlightTimer = null; }
@@ -1717,5 +1792,8 @@
     refreshComposerUi();
     const empty = transcriptEl.querySelector('.transcript-empty-text');
     if (empty) empty.textContent = T('chat.empty_state', '무엇을 도와드릴까요?');
+    transcriptEl.querySelectorAll('.msg-process').forEach((box) => {
+      updateProcessAction(box, box.querySelector('.msg-process-action'));
+    });
   });
 })();

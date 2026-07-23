@@ -48,6 +48,7 @@ const loadQuota = lazyLoader('./quota');
 const loadOnboarding = lazyLoader('./onboarding');
 const loadUsageStats = lazyLoader('./usage-stats');
 const loadUpdater = lazyLoader('./updater');
+const loadGitWorkspace = lazyLoader('./git-workspace');
 
 function requireOnboarding() {
   const onboarding = loadOnboarding();
@@ -122,17 +123,36 @@ function registerIpc({ backend, getWindow, broadcast }) {
 
   handle('createSession', ({ cwd } = {}) => backend.createSession({ cwd }));
 
-  handle('pickDirectory', async () => {
+  handle('pickDirectory', async (defaultPath) => {
     const options = {
       title: '작업 폴더 선택', // pick a working directory for the new session
       properties: ['openDirectory', 'createDirectory'],
     };
+    if (typeof defaultPath === 'string' && defaultPath.trim()) {
+      options.defaultPath = defaultPath;
+    }
     const win = getWindow();
     const result = win
       ? await dialog.showOpenDialog(win, options)
       : await dialog.showOpenDialog(options);
     if (result.canceled || !result.filePaths.length) return null;
     return result.filePaths[0];
+  });
+
+  handle('getGitInfo', (cwd) => {
+    const git = loadGitWorkspace();
+    if (!git || typeof git.listInfo !== 'function') {
+      return { isRepository: false, current: null, branches: [] };
+    }
+    return git.listInfo(cwd);
+  });
+
+  handle('checkoutGitBranch', (cwd, branch) => {
+    const git = loadGitWorkspace();
+    if (!git || typeof git.checkout !== 'function') {
+      throw new Error('Git 작업공간 기능을 사용할 수 없습니다.');
+    }
+    return git.checkout(cwd, branch);
   });
 
   // Window controls for the menu-less build (renderer re-binds Cmd+W/M/H).
@@ -210,11 +230,12 @@ function registerIpc({ backend, getWindow, broadcast }) {
     }
   });
 
-  // M3's updater wires kimi:updateCheck / kimi:updateQuitAndInstall itself via
+  // M3's updater wires updateCheck / updateDownload / updateQuitAndInstall via
   // register(); fall back to graceful dev stubs when it is absent/broken.
   wireUpdater(broadcast);
   if (!updaterWired) {
     handle('updateCheck', () => ({ status: 'dev' }));
+    handle('updateDownload', () => ({ status: 'dev' }));
     handle('updateQuitAndInstall', () => {
       throw new Error('updates are unavailable in this build');
     });

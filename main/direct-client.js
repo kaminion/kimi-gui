@@ -657,6 +657,7 @@ async function streamRequest({ token, body, signal, hooks }) {
  * @param {object} [args.hooks]  { onDelta(text), onThinking(text),
  *   onToolStart({id,name,input}), onToolEnd({id,name,input},{output,is_error}),
  *   requireApproval({id,name,input}) -> Promise<'approved'|'rejected'>,
+ *   takeSteers() -> string[],
  *   onUsage({input_tokens,output_tokens,cache_read_tokens,cache_creation_tokens}) }
  * @returns {Promise<{aborted:boolean, stopReason:string, usage:object, text:string}>}
  */
@@ -711,6 +712,13 @@ async function runTurn({ store, sessionId, cwd, model, effort, prompt, signal, h
     turnUsage.cache_creation_tokens += u.cache_creation_tokens || 0;
   };
 
+  const takeSteers = () => {
+    if (typeof hooks.takeSteers !== 'function') return [];
+    const pending = hooks.takeSteers();
+    if (!Array.isArray(pending)) return [];
+    return pending.map((text) => String(text || '').trim()).filter(Boolean);
+  };
+
   try {
     for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
       const { blocks, stopReason: sr, usage } = await streamRequest({ token, body, signal: controller.signal, hooks });
@@ -733,45 +741,61 @@ async function runTurn({ store, sessionId, cwd, model, effort, prompt, signal, h
         stopReason = 'aborted';
         break;
       }
-      if (stopReason !== 'tool_use' || !toolUses.length) break;
 
       const resultParts = [];
-      for (const call of toolUses) {
-        const toolInfo = { id: call.id, name: call.name, input: call.input || {} };
-        let decision = 'approved';
-        if (hooks.requireApproval) {
-          decision = await hooks.requireApproval(toolInfo);
-        }
-        if (controller.signal.aborted) {
-          aborted = true;
-          stopReason = 'aborted';
-          break;
-        }
-        let output;
-        let isError = false;
-        if (decision === 'rejected') {
-          output = 'Tool call rejected by the user.';
-          isError = true;
-        } else {
-          if (hooks.onToolStart) hooks.onToolStart(toolInfo);
-          try {
-            output = call._inputError ? (() => { throw new Error('malformed tool input JSON'); })() : await executeTool(workdir, call.name, call.input || {});
-          } catch (e) {
-            output = `Error: ${e.message}`;
-            isError = true;
+      if (stopReason === 'tool_use' && toolUses.length) {
+        for (const call of toolUses) {
+          const toolInfo = { id: call.id, name: call.name, input: call.input || {} };
+          let decision = 'approved';
+          if (hooks.requireApproval) {
+            decision = await hooks.requireApproval(toolInfo);
           }
-          if (hooks.onToolEnd) hooks.onToolEnd(toolInfo, { output, is_error: isError });
+          if (controller.signal.aborted) {
+            aborted = true;
+            stopReason = 'aborted';
+            break;
+          }
+          let output;
+          let isError = false;
+          if (decision === 'rejected') {
+            output = 'Tool call rejected by the user.';
+            isError = true;
+          } else {
+            if (hooks.onToolStart) hooks.onToolStart(toolInfo);
+            try {
+              output = call._inputError ? (() => { throw new Error('malformed tool input JSON'); })() : await executeTool(workdir, call.name, call.input || {});
+            } catch (e) {
+              output = `Error: ${e.message}`;
+              isError = true;
+            }
+            if (hooks.onToolEnd) hooks.onToolEnd(toolInfo, { output, is_error: isError });
+          }
+          step.results.push({ tool_use_id: call.id, output, is_error: isError });
+          resultParts.push({
+            type: 'tool_result',
+            tool_use_id: call.id,
+            content: String(output),
+            ...(isError ? { is_error: true } : {}),
+          });
         }
-        step.results.push({ tool_use_id: call.id, output, is_error: isError });
-        resultParts.push({
-          type: 'tool_result',
-          tool_use_id: call.id,
-          content: String(output),
-          ...(isError ? { is_error: true } : {}),
-        });
       }
       if (aborted) break;
-      body.messages.push({ role: 'user', content: resultParts });
+
+      // Steering is injected at the first safe model boundary. When tools ran,
+      // keep tool_result and adjustment text in the same user message to
+      // preserve Anthropic's required role alternation.
+      const steers = takeSteers();
+      if (steers.length) step.steers = steers;
+      const steerParts = steers.map((text) => ({ type: 'text', text }));
+      if (resultParts.length) {
+        body.messages.push({ role: 'user', content: resultParts.concat(steerParts) });
+        continue;
+      }
+      if (steerParts.length) {
+        body.messages.push({ role: 'user', content: steerParts });
+        continue;
+      }
+      break;
     }
   } catch (e) {
     if (e && (e.name === 'AbortError' || controller.signal.aborted)) {

@@ -40,7 +40,10 @@ const api = {
   listSessions: () => invoke('listSessions'),
   createSession: ({ cwd } = {}) => invoke('createSession', { cwd }),
   // Native directory picker -> absolute path string | null
-  pickDirectory: () => invoke('pickDirectory'),
+  pickDirectory: (defaultPath) => invoke('pickDirectory', defaultPath),
+  // New-chat workspace controls.
+  getGitInfo: (cwd) => invoke('getGitInfo', cwd),
+  checkoutGitBranch: (cwd, branch) => invoke('checkoutGitBranch', cwd, branch),
   getMessages: (sessionId) => invoke('getMessages', sessionId),
   getProfile: (sessionId) => invoke('getProfile', sessionId),
   sendPrompt: (sessionId, text) => invoke('sendPrompt', sessionId, text),
@@ -97,6 +100,7 @@ const api = {
   // --- Auto-update (M3 backend) -------------------------------------------------
   // -> { status:'dev'|'checking'|'available'|'downloading'|'downloaded'|'none'|'error', ... }
   updateCheck: () => invoke('updateCheck'),
+  updateDownload: () => invoke('updateDownload'),
   updateQuitAndInstall: () => invoke('updateQuitAndInstall'),
   getAppVersion: () => invoke('getAppVersion'),
 
