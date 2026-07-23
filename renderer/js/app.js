@@ -144,6 +144,31 @@
       $('#composer')?.focus();
     },
 
+    startSkillDraft(scope = 'project') {
+      App.startNewChat();
+      const projectOnly = scope === 'project';
+      const template = projectOnly
+        ? T(
+          'skills.ask_template_project',
+          '이 프로젝트에서 반복해서 사용할 새 Agent Skill을 만들어 주세요.\n\n' +
+          'Skill 목적:\n- [원하는 작업과 결과를 적어 주세요]\n\n' +
+          '요구사항:\n- 기존 Skills와 중복되는지 먼저 확인\n' +
+          '- .agents/skills/<skill-name>/SKILL.md 형식으로 현재 프로젝트에 추가\n' +
+          '- 명확한 이름, 설명, 실행 절차와 안전 조건 포함\n' +
+          '- 추가 후 사용 예시와 /skill:<skill-name> 명령 설명',
+        )
+        : T(
+          'skills.ask_template_global',
+          '모든 프로젝트에서 반복해서 사용할 새 Agent Skill을 만들어 주세요.\n\n' +
+          'Skill 목적:\n- [원하는 작업과 결과를 적어 주세요]\n\n' +
+          '요구사항:\n- 기존 Skills와 중복되는지 먼저 확인\n' +
+          '- ~/.config/agents/skills/<skill-name>/SKILL.md 형식으로 추가\n' +
+          '- 명확한 이름, 설명, 실행 절차와 안전 조건 포함\n' +
+          '- 추가 후 사용 예시와 /skill:<skill-name> 명령 설명',
+        );
+      window.Chat?.setComposerText?.(template);
+    },
+
     /**
      * Send a prompt. Creates a session lazily on first send, reusing the last
      * working directory when known, otherwise asking via the native picker.
@@ -772,6 +797,9 @@
     });
     $('#usage-nav-btn').addEventListener('click', () => {
       App.showView(App.state.view === 'usage' ? 'chat' : 'usage');
+    });
+    $('#skills-btn')?.addEventListener('click', () => {
+      safeCall(() => window.Settings?.openSkills?.());
     });
     // NOTE: composer send/steer/abort controls are owned by chat.js
     // (optimistic echo, busy state, autoresize). Binding them here too would

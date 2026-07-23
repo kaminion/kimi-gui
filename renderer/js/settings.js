@@ -2,13 +2,12 @@
  * window.Settings = { open(), close(), isOpen(), getDefaultModel() }
  *
  * macOS-Settings-style modal rendered into #settings-root: left section rail,
- * right content. Sections:
+ * right content. The main sidebar opens Skills as a focused library without
+ * the Settings navigation. Settings sections:
  *   일반     — language segment (한국어/English) + theme segment (시스템/다크/라이트)
  *   모델     — default model for NEW sessions (localStorage 'kimi.defaultModel');
  *             App applies it right after createSession via Settings.getDefaultModel()
  *             + v4: 스웜 기본값 toggle (localStorage 'kimi.defaultSwarm', CLI 전용)
- *   Skills   — add local Agent Skill folders/Markdown, enable/disable them
- *             across official discovery roots, or move them to the OS Trash.
  *   엔진     — engine picker (v3): 내장 엔진(direct, 기본) vs Kimi Code CLI(에이전트
  *             모드); switching asks to confirm, then setEngine + location.reload().
  *             Under the CLI card: CLI install status + manual install button with
@@ -34,6 +33,7 @@
 
   let backdropEl = null;      // .modal-backdrop.settings-backdrop while open
   let activeSection = 'general';
+  let focusedSkills = false;
   let unsubscribe = null;     // window.kimi.onEvent unsubscribe fn
   let onboardingState = null; // cached onboardingGetState() result
   let appVersion = null;      // cached getAppVersion() result
@@ -44,7 +44,7 @@
   let engineInfo = null;      // cached getState() { engine, cliInstalled } for the 엔진 section
   let cliInstall = null;      // { running, line } while onboardingInstallCli runs
   let skillsState = null;     // { cwd, loading, data?, error?, busyId?, notice? }
-  let skillInstallScope = 'user';
+  let skillInstallScope = null;
 
   function el(tag, className, text) {
     const n = document.createElement(tag);
@@ -79,7 +79,6 @@
     return [
       { id: 'general', label: T('settings.section.general', '일반') },
       { id: 'model', label: T('settings.section.model', '모델') },
-      { id: 'skills', label: T('settings.section.skills', 'Skills') },
       { id: 'engine', label: T('settings.section.engine', '엔진') },
       { id: 'account', label: T('settings.section.account', '계정') },
       { id: 'updates', label: T('settings.section.updates', '업데이트') },
@@ -667,6 +666,7 @@
     window.kimi.skillsList({ cwd }).then((data) => {
       if (!isOpen() || activeSection !== 'skills' || skillsState?.cwd !== cwd) return;
       skillsState = { cwd, loading: false, data, notice };
+      if (!skillInstallScope) skillInstallScope = data?.projectRoot ? 'project' : 'user';
       if (!data?.projectRoot && skillInstallScope === 'project') skillInstallScope = 'user';
       rerender();
     }).catch((error) => {
@@ -832,21 +832,39 @@
     }
 
     const toolbar = el('div', 'skills-toolbar');
+    const availability = el('label', 'skills-availability');
+    availability.appendChild(el(
+      'span',
+      'skills-availability-label',
+      T('settings.skills.install_scope', '사용 범위'),
+    ));
     const scope = document.createElement('select');
     scope.className = 'settings-select skills-scope';
-    scope.setAttribute('aria-label', T('settings.skills.install_scope', '추가 위치'));
+    scope.setAttribute('aria-label', T('settings.skills.install_scope', '사용 범위'));
     const user = document.createElement('option');
     user.value = 'user';
-    user.textContent = T('settings.skills.scope_user', '사용자');
+    user.textContent = T('settings.skills.scope_user', '모든 프로젝트');
     const project = document.createElement('option');
     project.value = 'project';
-    project.textContent = T('settings.skills.scope_project', '프로젝트');
+    project.textContent = T('settings.skills.scope_project', '현재 프로젝트');
     project.disabled = !skillsState.data?.projectRoot;
     scope.append(user, project);
     scope.value = project.disabled ? 'user' : skillInstallScope;
     scope.addEventListener('change', () => { skillInstallScope = scope.value; });
+    availability.appendChild(scope);
 
-    const folderBtn = el('button', 'btn btn-primary', T('settings.skills.add_folder', '폴더 추가'));
+    const askBtn = el(
+      'button',
+      'btn btn-primary skills-ask-kimi',
+      T('settings.skills.ask_kimi', 'Kimi에게 추가 부탁하기'),
+    );
+    askBtn.type = 'button';
+    askBtn.addEventListener('click', () => {
+      const selectedScope = skillInstallScope || (skillsState.data?.projectRoot ? 'project' : 'user');
+      close();
+      window.App?.startSkillDraft?.(selectedScope);
+    });
+    const folderBtn = el('button', 'btn', T('settings.skills.add_folder', '폴더 추가'));
     folderBtn.type = 'button';
     folderBtn.disabled = !!skillsState.busyId;
     folderBtn.addEventListener('click', () => void addSkill('directory'));
@@ -854,7 +872,9 @@
     fileBtn.type = 'button';
     fileBtn.disabled = !!skillsState.busyId;
     fileBtn.addEventListener('click', () => void addSkill('file'));
-    toolbar.append(scope, folderBtn, fileBtn);
+    const toolbarActions = el('div', 'skills-toolbar-actions');
+    toolbarActions.append(askBtn, folderBtn, fileBtn);
+    toolbar.append(availability, toolbarActions);
     content.appendChild(toolbar);
 
     if (skillsState.notice) {
@@ -960,7 +980,8 @@
 
   function rerender() {
     if (!backdropEl) return;
-    renderNav(backdropEl.querySelector('.settings-nav'));
+    const nav = backdropEl.querySelector('.settings-nav');
+    if (nav) renderNav(nav);
     renderSection(backdropEl.querySelector('.settings-content'));
   }
 
@@ -982,25 +1003,49 @@
     if (backdropEl) return;
     const root = document.getElementById('settings-root');
     if (!root) return;
-    if (sections().some((item) => item.id === section)) activeSection = section;
+    if (section === 'skills' || sections().some((item) => item.id === section)) {
+      activeSection = section;
+    }
+    focusedSkills = section === 'skills' && options.focused === true;
     if (activeSection === 'account' && options.notice) {
       loginError = String(options.notice);
     }
 
     backdropEl = el('div', 'modal-backdrop settings-backdrop');
-    const modal = el('div', 'settings-modal');
+    const modal = el('div', `settings-modal${focusedSkills ? ' skills-library-modal' : ''}`);
     modal.setAttribute('role', 'dialog');
     modal.setAttribute('aria-modal', 'true');
-    modal.setAttribute('aria-label', T('settings.title', '설정'));
-    const nav = el('nav', 'settings-nav');
+    modal.setAttribute(
+      'aria-label',
+      focusedSkills
+        ? T('skills.manager_title', 'Skills 관리')
+        : T('settings.title', '설정'),
+    );
     const content = el('div', 'settings-content');
-    modal.append(nav, content);
+    let nav = null;
+    if (focusedSkills) {
+      const header = el('div', 'skills-library-header');
+      header.appendChild(el(
+        'h1',
+        'skills-library-title',
+        T('skills.manager_title', 'Skills 관리'),
+      ));
+      const closeBtn = el('button', 'skills-library-close', '×');
+      closeBtn.type = 'button';
+      closeBtn.setAttribute('aria-label', T('common.close', '닫기'));
+      closeBtn.addEventListener('click', close);
+      header.appendChild(closeBtn);
+      modal.append(header, content);
+    } else {
+      nav = el('nav', 'settings-nav');
+      modal.append(nav, content);
+    }
     backdropEl.appendChild(modal);
     backdropEl.addEventListener('mousedown', (e) => { if (e.target === backdropEl) close(); });
     root.appendChild(backdropEl);
     document.addEventListener('keydown', onKeydown, true);
     subscribeEvents();
-    renderNav(nav);
+    if (nav) renderNav(nav);
     renderSection(content);
     // Warm the caches so 계정/정보/업데이트 render promptly when opened.
     void loadOnboardingState();
@@ -1017,6 +1062,8 @@
     document.removeEventListener('keydown', onKeydown, true);
     backdropEl.remove();
     backdropEl = null;
+    if (focusedSkills) activeSection = 'general';
+    focusedSkills = false;
   }
 
   function onKeydown(e) {
@@ -1027,5 +1074,9 @@
     }
   }
 
-  window.Settings = { open, close, isOpen, getDefaultModel };
+  function openSkills() {
+    open('skills', { focused: true });
+  }
+
+  window.Settings = { open, openSkills, close, isOpen, getDefaultModel };
 })();

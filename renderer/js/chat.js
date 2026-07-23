@@ -2243,6 +2243,21 @@
     emitChangeSnapshot(emptyChangeSnapshot(activeSessionId));
   }
 
+  function setComposerText(text, { focus = true } = {}) {
+    if (!initialized) init();
+    if (!initialized || readOnly) return false;
+    composerEl.value = String(text ?? '');
+    autoGrow();
+    updateSendBtn();
+    slashAutocomplete?.handleInput?.();
+    if (focus) {
+      composerEl.focus();
+      const end = composerEl.value.length;
+      composerEl.setSelectionRange(end, end);
+    }
+    return true;
+  }
+
   window.Chat = {
     init,
     beginLoading,
@@ -2255,6 +2270,7 @@
     reset,
     scrollToBottom,
     scrollToMessage,
+    setComposerText,
     getChangeSummary: () => currentChangeSnapshot,
   };
 
