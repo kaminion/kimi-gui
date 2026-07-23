@@ -50,6 +50,7 @@ const loadUsageStats = lazyLoader('./usage-stats');
 const loadUpdater = lazyLoader('./updater');
 const loadGitWorkspace = lazyLoader('./git-workspace');
 const loadSkillManager = lazyLoader('./skill-manager');
+const loadSlashCommands = lazyLoader('./slash-commands');
 
 function requireOnboarding() {
   const onboarding = loadOnboarding();
@@ -201,6 +202,41 @@ function registerIpc({ backend, getWindow, broadcast }) {
 
   handle('skillsRemove', ({ id, cwd } = {}) =>
     requireSkills().remove({ id, cwd }));
+
+  handle('listSlashCommands', async ({ sessionId, cwd } = {}) => {
+    const slash = loadSlashCommands();
+    if (!slash || typeof slash.mergeSlashCommands !== 'function') {
+      throw new Error('Slash command completion is unavailable.');
+    }
+    if (backend.engine() !== 'cli') return { commands: [] };
+
+    let discovered = [];
+    if (sessionId && typeof backend.listSkills === 'function') {
+      try {
+        discovered = await backend.listSkills(sessionId);
+      } catch {
+        // A newly created/disconnected session can miss the API snapshot.
+        // The local repository fallback below still exposes custom skills.
+      }
+    }
+    try {
+      const local = await requireSkills().list({ cwd });
+      discovered = [
+        ...discovered,
+        ...(local.skills || [])
+          .filter((skill) => skill.enabled)
+          .map((skill) => ({
+            name: skill.name,
+            description: skill.description,
+            type: skill.type,
+            source: skill.scope,
+          })),
+      ];
+    } catch {
+      // Base commands and any daemon-discovered skills remain useful.
+    }
+    return { commands: slash.mergeSlashCommands(discovered) };
+  });
 
   // Window controls for the menu-less build (renderer re-binds Cmd+W/M/H).
   handle('windowAction', (action) => {

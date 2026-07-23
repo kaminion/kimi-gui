@@ -1451,6 +1451,11 @@ async function listTasks(sessionId) {
   return []; // direct engine has no background-task API
 }
 
+async function listSkills(sessionId) {
+  if (currentEngine !== 'cli' || !sessionId) return [];
+  return requireCli().listSkills(sessionId);
+}
+
 // ---------------------------------------------------------------------------
 // Search (both session roots)
 // ---------------------------------------------------------------------------
@@ -1509,6 +1514,7 @@ module.exports = {
   renameSession,
   deleteSession,
   listTasks,
+  listSkills,
   searchAll,
   // Exposed for main.js's did-finish-load hook and tests:
   ensureCliLaunched,

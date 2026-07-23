@@ -979,6 +979,143 @@
   overflow-y: auto;
 }
 
+/* Kimi CLI slash-command completion stays anchored to the composer so it
+   remains useful while the transcript scrolls. */
+.slash-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + var(--space-2));
+  left: 0;
+  z-index: 80;
+  overflow: hidden;
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface-raised) 94%, transparent);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-l);
+  box-shadow: var(--shadow-modal);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  transform-origin: bottom center;
+  animation: slash-menu-in 0.14s var(--ease-out);
+}
+
+.slash-menu[hidden] {
+  display: none;
+}
+
+.slash-menu-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 34px;
+  padding: 0 var(--space-3);
+  border-bottom: 0.5px solid var(--border);
+}
+
+.slash-menu-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slash-menu-hint {
+  flex: none;
+  color: var(--text-dim);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.slash-menu-list {
+  max-height: min(326px, 44vh);
+  overflow-y: auto;
+  padding: var(--space-1);
+  overscroll-behavior: contain;
+}
+
+.slash-option {
+  display: grid;
+  grid-template-columns: minmax(112px, 0.36fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 36px;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-s);
+  cursor: default;
+}
+
+.slash-option.active {
+  background: var(--active-bg);
+}
+
+.slash-option-name {
+  overflow: hidden;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slash-option-description {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slash-option-badge {
+  padding: 2px 6px;
+  color: var(--text-dim);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--bg-secondary);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-s);
+}
+
+.slash-menu-state {
+  display: grid;
+  min-height: 62px;
+  place-items: center;
+  padding: var(--space-3);
+  color: var(--text-dim);
+  font-size: 12px;
+  text-align: center;
+}
+
+@keyframes slash-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.995);
+  }
+}
+
+@media (max-width: 600px) {
+  .slash-menu-hint {
+    display: none;
+  }
+
+  .slash-option {
+    grid-template-columns: minmax(104px, 0.4fr) minmax(0, 1fr) auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slash-menu {
+    animation: none;
+  }
+}
+
 /* Circular accent send button; arrow glyph supplied by CSS mask.
    Keep #send-btn empty in HTML — if an inline <svg> is added, the CSS
    arrow hides itself via :has(svg). */

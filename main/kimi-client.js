@@ -251,6 +251,15 @@ class KimiClient extends EventEmitter {
   }
 
   /**
+   * Skills discovered for this session. The daemon supplies source/type so
+   * clients can mirror its slash naming (`/<builtin>` vs `/skill:<custom>`).
+   */
+  listSkills(id) {
+    return this.request('GET', `/sessions/${encodeURIComponent(id)}/skills`)
+      .then((data) => data?.skills ?? []);
+  }
+
+  /**
    * Create a session rooted at `cwd`. The daemon ignores `agent_config.model`
    * in the create body (0.28.1), so the model is applied via POST /profile.
    * Falls back to the daemon's default model when `model` is omitted —

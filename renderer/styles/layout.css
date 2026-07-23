@@ -538,6 +538,7 @@ body {
 
 /* ---- Composer: floating rounded card, lifted one step off the base ---- */
 #composer-wrap {
+  position: relative;
   flex: none;
   display: flex;
   align-items: flex-end;

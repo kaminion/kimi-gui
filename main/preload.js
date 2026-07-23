@@ -51,6 +51,8 @@ const api = {
   skillsSetEnabled: ({ id, enabled, cwd } = {}) =>
     invoke('skillsSetEnabled', { id, enabled, cwd }),
   skillsRemove: ({ id, cwd } = {}) => invoke('skillsRemove', { id, cwd }),
+  listSlashCommands: ({ sessionId, cwd } = {}) =>
+    invoke('listSlashCommands', { sessionId, cwd }),
   getMessages: (sessionId) => invoke('getMessages', sessionId),
   getProfile: (sessionId) => invoke('getProfile', sessionId),
   sendPrompt: (sessionId, text) => invoke('sendPrompt', sessionId, text),

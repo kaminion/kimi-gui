@@ -108,6 +108,7 @@
   let composerEl = null;
   let sendBtn = null;
   let abortBtn = null;
+  let slashAutocomplete = null;
   let initialized = false;
 
   let activeSessionId = null;
@@ -2105,13 +2106,18 @@
 
   function wireComposer() {
     composerEl.addEventListener('keydown', (e) => {
+      if (slashAutocomplete?.handleKeydown?.(e)) return;
       // Enter sends; Shift+Enter inserts a newline. isComposing guards IME (한글) input.
       if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
         e.preventDefault();
         doSend();
       }
     });
-    composerEl.addEventListener('input', () => { autoGrow(); updateSendBtn(); });
+    composerEl.addEventListener('input', () => {
+      autoGrow();
+      updateSendBtn();
+      slashAutocomplete?.handleInput?.();
+    });
     sendBtn.addEventListener('click', doSend);
     abortBtn?.addEventListener('click', () => {
       if (busy && !readOnly && typeof window.App?.abort === 'function') window.App.abort();
@@ -2127,6 +2133,25 @@
     abortBtn = document.getElementById('composer-abort-btn');
     if (!transcriptEl || !composerEl || !sendBtn) return; // DOM not ready
     initialized = true;
+    slashAutocomplete = window.SlashAutocomplete?.create?.({
+      composer: composerEl,
+      onValueChange: () => {
+        autoGrow();
+        updateSendBtn();
+      },
+      getContext: () => {
+        const app = window.App;
+        const sessionId = app?.state?.activeId ?? null;
+        const session = app?.state?.sessions?.find?.((item) => item.id === sessionId);
+        let recentCwd = null;
+        try { recentCwd = localStorage.getItem('kimi.lastCwd'); } catch { /* ignore */ }
+        return {
+          sessionId,
+          cwd: session?.cwd || recentCwd,
+          engine: app?.state?.engine ?? null,
+        };
+      },
+    }) ?? null;
     wireComposer();
     transcriptEl.addEventListener('scroll', () => { pinned = isPinned(); });
     // User disclosure intent for process blocks: a click on the header records
@@ -2156,6 +2181,7 @@
     clearHistoryLoading();
     releaseHeldOptimisticSteers();
     if (sessionId !== undefined) activeSessionId = sessionId;
+    slashAutocomplete?.refresh?.();
     if (reloadTimer) { clearTimeout(reloadTimer); reloadTimer = null; }
     optimisticUser = null;
     optimisticSteers = [];
@@ -2184,6 +2210,7 @@
     const next = id ?? null;
     const changed = next !== activeSessionId;
     activeSessionId = next;
+    slashAutocomplete?.refresh?.();
     if (changed) emitChangeSnapshot(emptyChangeSnapshot(next));
   }
 
@@ -2202,6 +2229,7 @@
     if (initialized) {
       transcriptEl.innerHTML = '';
       composerEl.value = '';
+      slashAutocomplete?.close?.();
       autoGrow();
       setBusy(false);
       refreshComposerUi();
