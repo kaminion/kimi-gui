@@ -18,7 +18,7 @@
  * once onboarding completes.
  */
 
-const { app, BrowserWindow, nativeImage } = require('electron');
+const { app, BrowserWindow, Menu, nativeImage } = require('electron');
 const path = require('node:path');
 
 // Brand: menu bar / Dock label in dev; packaged builds use productName + icns/ico.
@@ -55,6 +55,16 @@ function createWindow() {
       contextIsolation: true,
       sandbox: true,
     },
+  });
+
+  // End users get no DevTools: block its keyboard shortcuts (the default
+  // Electron menu's View > Toggle Developer Tools is removed in installAppMenu).
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return;
+    const key = (input.key || '').toLowerCase();
+    if ((input.meta && input.alt && key === 'i') || (input.control && input.shift && key === 'i') || key === 'f12') {
+      event.preventDefault();
+    }
   });
 
   // Renderer must use window.kimi.openExternal; never open new windows.
@@ -105,9 +115,37 @@ if (!gotLock) {
     }
   });
 
+/** Minimal branded menu — replaces Electron's default (which exposes View > Toggle Developer Tools). */
+function installAppMenu() {
+  if (isMac) {
+    Menu.setApplicationMenu(
+      Menu.buildFromTemplate([
+        {
+          label: 'kimi-gui',
+          submenu: [
+            { role: 'about', label: 'About kimi-gui' },
+            { type: 'separator' },
+            { role: 'hide' },
+            { role: 'hideOthers' },
+            { role: 'unhide' },
+            { type: 'separator' },
+            { role: 'quit', label: 'Quit kimi-gui' },
+          ],
+        },
+        { role: 'editMenu' },
+        { role: 'windowMenu' },
+      ])
+    );
+  } else {
+    // win/linux: the default menu bar exposes DevTools — drop it entirely.
+    Menu.setApplicationMenu(null);
+  }
+}
+
   app.whenReady().then(() => {
     // Dev mode shows the Electron dock icon by default — use ours (packaged mac uses the icns).
     if (isMac) app.dock?.setIcon(nativeImage.createFromPath(APP_ICON));
+    installAppMenu();
     registerIpc({
       backend,
       getWindow: () => mainWindow,
