@@ -1,6 +1,6 @@
-# Kimi-GUI [![Version](https://img.shields.io/badge/version-0.6.1-blue)](./package.json) [![Commit Activity](https://img.shields.io/github/commit-activity/m/kaminion/kimi-gui)](https://github.com/kaminion/kimi-gui/graphs/commit-activity) [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey)](#requirements)
+# Kimi-GUI [![Version](https://img.shields.io/badge/version-0.6.1-blue)](./package.json) [![Commit Activity](https://img.shields.io/github/commit-activity/m/kaminion/Kimi-GUI)](https://github.com/kaminion/Kimi-GUI/graphs/commit-activity) [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey)](#requirements)
 
-[Kimi Code](https://www.kimi.com/code/) | [Usage guide](./docs/kimi-code-made-easier.md) | [GitHub](https://github.com/kaminion/kimi-gui) | [한국어](./README.ko.md)
+[Kimi Code](https://www.kimi.com/code/) | [Usage guide](./docs/kimi-code-made-easier.md) | [GitHub](https://github.com/kaminion/Kimi-GUI) | [한국어](./README.ko.md)
 
 > [!IMPORTANT]
 > **Kimi-GUI is an independent community project, not an official Moonshot AI product.** It uses Kimi Code APIs and the same local credentials as the official Kimi Code CLI.
@@ -73,8 +73,8 @@ the [usage guide](./docs/kimi-code-made-easier.md).
 ### Run from source
 
 ```sh
-git clone https://github.com/kaminion/kimi-gui.git
-cd kimi-gui
+git clone https://github.com/kaminion/Kimi-GUI.git
+cd Kimi-GUI
 npm install
 npm start
 ```

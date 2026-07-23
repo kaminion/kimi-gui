@@ -45,7 +45,7 @@ CONTRACT-V2 §Auto-update를 따른다.
 
 ### 저장소/피드
 
-- 업데이트 피드는 GitHub Releases(`kaminion/kimi-gui`)다.
+- 업데이트 피드는 GitHub Releases(`kaminion/Kimi-GUI`)다.
   `electron-builder.yml`의 `publish` 설정이 소유자와 저장소를 명시하며,
   패키징 시 `app-update.yml` 생성과 `--publish` 업로드에 사용된다.
 - ⚠️ 주의: `package.json`에 `build` 키를 추가하면 `electron-builder.yml`이 **통째로

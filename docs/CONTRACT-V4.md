@@ -1,7 +1,8 @@
 # CONTRACT V4 (binding, additive)
 
-> Historical note: V4 introduced the lowercase npm/repository identifier
-> `kimi-gui`. The current user-facing product name is **Kimi-GUI**.
+> Historical note: V4 introduced the lowercase npm package identifier
+> `kimi-gui`. The current user-facing product and repository name is
+> **Kimi-GUI**.
 
 V4 items: app rename to **Kimi-GUI**; unified session list (direct mode also shows legacy CLI
 sessions); sidebar = custom groups + single '최근 내역' section; daily section shows limits;

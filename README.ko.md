@@ -5,7 +5,7 @@
 ![Electron](https://img.shields.io/badge/Electron-43-47848F?logo=electron&logoColor=white)
 ![made with](https://img.shields.io/badge/made%20with-vanilla%20JS%20%28no%20bundler%29-yellow)
 
-[GitHub](https://github.com/kaminion/kimi-gui) · [English](README.md)
+[GitHub](https://github.com/kaminion/Kimi-GUI) · [English](README.md)
 
 > [!NOTE]
 > **Kimi-GUI는 커뮤니티 프로젝트이며, MoonshotAI의 공식 제품이 아닙니다.** Kimi Code API를 사용하며 Kimi Code CLI와 로컬 자격증명을 공유합니다.

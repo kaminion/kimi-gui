@@ -2,7 +2,7 @@
 
 **One Kimi login. Two ways to work. One focused desktop app.**
 
-[Kimi-GUI](https://github.com/kaminion/kimi-gui) is an open-source desktop
+[Kimi-GUI](https://github.com/kaminion/Kimi-GUI) is an open-source desktop
 interface for Kimi Code and Kimi Code CLI. It is designed for people who want
 the power of an AI coding agent without spending their day managing terminal
 windows, remembering commands, or guessing what the agent changed.
@@ -15,7 +15,7 @@ visible in one place.
 > Kimi-GUI is an independent community project. It is not an official
 > Moonshot AI product.
 
-![The Kimi-GUI startup wordmark](https://raw.githubusercontent.com/kaminion/kimi-gui/main/docs/media/release-0.6.1-kimi-gui-brand.png)
+![The Kimi-GUI startup wordmark](https://raw.githubusercontent.com/kaminion/Kimi-GUI/main/docs/media/release-0.6.1-kimi-gui-brand.png)
 
 ## Start in three steps
 
@@ -41,7 +41,7 @@ Code CLI.
 The same local Kimi credentials can be shared with the CLI, so you do not have
 to maintain a separate account setup when you decide to use CLI Agent mode.
 
-![A simple first-launch screen with one Log in to Kimi button](https://raw.githubusercontent.com/kaminion/kimi-gui/main/docs/media/kimi-login.png)
+![A simple first-launch screen with one Log in to Kimi button](https://raw.githubusercontent.com/kaminion/Kimi-GUI/main/docs/media/kimi-login.png)
 
 ## Choose the experience that fits the task
 
@@ -63,7 +63,7 @@ The connection dialog explains what becomes available before you switch:
 Swarm and sub-agents, Plan mode, the full CLI toolset, and continuity with
 sessions created by Kimi Code CLI.
 
-![The CLI Agent mode dialog explains the advanced capabilities available after connecting](https://raw.githubusercontent.com/kaminion/kimi-gui/main/docs/media/release-0.6.1-cli-capabilities.png)
+![The CLI Agent mode dialog explains the advanced capabilities available after connecting](https://raw.githubusercontent.com/kaminion/Kimi-GUI/main/docs/media/release-0.6.1-cli-capabilities.png)
 
 ## Start in the right project and branch
 
@@ -75,7 +75,7 @@ This keeps the important context visible before Kimi begins. You are less
 likely to start a task in the wrong folder or discover too late that you were
 working on the wrong branch.
 
-![A new conversation with project and Git branch controls above the prompt](https://raw.githubusercontent.com/kaminion/kimi-gui/main/docs/media/release-0.6.0-new-chat.png)
+![A new conversation with project and Git branch controls above the prompt](https://raw.githubusercontent.com/kaminion/Kimi-GUI/main/docs/media/release-0.6.0-new-chat.png)
 
 Useful first prompts include:
 
@@ -105,7 +105,7 @@ For example, add a constraint as soon as you notice it:
 Keep the existing public API and include computers where no Kimi server is already running.
 ```
 
-![An active conversation with a queued work adjustment that can be edited or deleted](https://raw.githubusercontent.com/kaminion/kimi-gui/main/docs/media/release-0.6.1-queued-steer.png)
+![An active conversation with a queued work adjustment that can be edited or deleted](https://raw.githubusercontent.com/kaminion/Kimi-GUI/main/docs/media/release-0.6.1-queued-steer.png)
 
 ## Review the result without hunting through the repository
 
@@ -117,7 +117,7 @@ The same right-side panel also provides agent activity, so you can understand
 both what the agent is doing and what it has changed without stacking multiple
 inspectors.
 
-![The Changes tab showing changed files and a per-file diff beside the conversation](https://raw.githubusercontent.com/kaminion/kimi-gui/main/docs/media/release-0.6.0-changes-panel.png)
+![The Changes tab showing changed files and a per-file diff beside the conversation](https://raw.githubusercontent.com/kaminion/Kimi-GUI/main/docs/media/release-0.6.0-changes-panel.png)
 
 ## A desktop workspace, not just a chat window
 
@@ -159,14 +159,14 @@ Requirements:
 Run it from source:
 
 ```sh
-git clone https://github.com/kaminion/kimi-gui.git
-cd kimi-gui
+git clone https://github.com/kaminion/Kimi-GUI.git
+cd Kimi-GUI
 npm install
 npm start
 ```
 
 Installers and portable builds are available from
-[GitHub Releases](https://github.com/kaminion/kimi-gui/releases).
+[GitHub Releases](https://github.com/kaminion/Kimi-GUI/releases).
 
 **Use Kimi Code for a quick desktop conversation. Connect Kimi CLI when the
 task needs the full agent workflow. Keep both experiences in one place.**

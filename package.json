@@ -6,7 +6,7 @@
   "description": "Kimi-GUI desktop interface with built-in and Kimi CLI engines",
   "repository": {
     "type": "git",
-    "url": "https://github.com/kaminion/kimi-gui.git"
+    "url": "https://github.com/kaminion/Kimi-GUI.git"
   },
   "main": "main/main.js",
   "scripts": {

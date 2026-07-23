@@ -10,7 +10,7 @@ directories:
 publish:
   - provider: github
     owner: kaminion
-    repo: kimi-gui
+    repo: Kimi-GUI
 
 # Pack only runtime files; docs/ (incl. docs/ref ground-truth specs) stays out of the bundle.
 files:
